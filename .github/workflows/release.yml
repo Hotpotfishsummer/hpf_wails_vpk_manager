@@ -45,8 +45,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: false # 明确禁用 Actions 缓存
+          node-version: 22
 
       - name: Install Wails CLI
         shell: pwsh
