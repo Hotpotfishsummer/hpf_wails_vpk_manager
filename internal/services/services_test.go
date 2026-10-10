@@ -95,15 +95,28 @@ func TestExportAndImport(t *testing.T) {
 		t.Errorf("ImportedCount = %d, want 1", impRes.ImportedCount)
 	}
 
-	// Check extracted files
-	extractedVpk := filepath.Join(targetAddons, "mod1.vpk")
-	extractedImg := filepath.Join(targetAddons, "mod1.jpg")
-
-	if _, err := os.Stat(extractedVpk); err != nil {
-		t.Errorf("extracted vpk missing: %s", extractedVpk)
+	// Test Import direct VPK and folder
+	directVpk := filepath.Join(tempDir, "direct.vpk")
+	_ = os.WriteFile(directVpk, []byte("direct vpk content"), 0644)
+	directRes := importSvc.ImportCompressedFiles([]string{directVpk}, targetAddons)
+	if !directRes.Success || directRes.ImportedCount != 1 {
+		t.Fatalf("Import direct VPK failed: %+v", directRes)
 	}
-	if _, err := os.Stat(extractedImg); err != nil {
-		t.Errorf("extracted image missing: %s", extractedImg)
+	if _, err := os.Stat(filepath.Join(targetAddons, "direct.vpk")); err != nil {
+		t.Errorf("direct vpk missing in target")
+	}
+
+	// Test Import Directory
+	subFolder := filepath.Join(tempDir, "mod_pack_folder")
+	_ = os.MkdirAll(subFolder, 0755)
+	_ = os.WriteFile(filepath.Join(subFolder, "folder_mod.vpk"), []byte("folder vpk"), 0644)
+	_ = os.WriteFile(filepath.Join(subFolder, "folder_mod.png"), []byte("folder png"), 0644)
+	dirRes := importSvc.ImportCompressedFiles([]string{subFolder}, targetAddons)
+	if !dirRes.Success || dirRes.ImportedCount != 2 {
+		t.Fatalf("Import directory failed: %+v", dirRes)
+	}
+	if _, err := os.Stat(filepath.Join(targetAddons, "folder_mod.vpk")); err != nil {
+		t.Errorf("folder_mod.vpk missing in target")
 	}
 }
 

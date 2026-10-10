@@ -47,26 +47,36 @@ func (s *ImportService) ImportCompressedFiles(filePaths []string, targetAddonsDi
 	var errors []string
 
 	for _, p := range filePaths {
-		if _, err := os.Stat(p); err != nil {
+		stat, err := os.Stat(p)
+		if err != nil {
 			errors = append(errors, fmt.Sprintf("文件不存在: %s", p))
 			continue
 		}
 
+		if stat.IsDir() {
+			count, dirErrs := s.importDirectory(p, targetAddonsDir)
+			importedCount += count
+			errors = append(errors, dirErrs...)
+			continue
+		}
+
 		lower := strings.ToLower(p)
-		var err error
-		if strings.HasSuffix(lower, ".tar.zst") {
-			err = s.extractTarZst(p, targetAddonsDir)
+		var importErr error
+		if strings.HasSuffix(lower, ".tar.zst") || strings.HasSuffix(lower, ".zst") {
+			importErr = s.extractTarZst(p, targetAddonsDir)
 		} else if strings.HasSuffix(lower, ".zip") {
-			err = s.extractZip(p, targetAddonsDir)
+			importErr = s.extractZip(p, targetAddonsDir)
 		} else if strings.HasSuffix(lower, ".7z") {
-			err = s.extract7z(p, targetAddonsDir)
+			importErr = s.extract7z(p, targetAddonsDir)
+		} else if s.isVpkOrImage(p) {
+			importErr = s.copyFileToDir(p, targetAddonsDir)
 		} else {
 			errors = append(errors, fmt.Sprintf("不支持的文件格式: %s", filepath.Base(p)))
 			continue
 		}
 
-		if err != nil {
-			errors = append(errors, fmt.Sprintf("解压 %s 失败: %v", filepath.Base(p), err))
+		if importErr != nil {
+			errors = append(errors, fmt.Sprintf("导入 %s 失败: %v", filepath.Base(p), importErr))
 		} else {
 			importedCount++
 		}
@@ -79,6 +89,50 @@ func (s *ImportService) ImportCompressedFiles(filePaths []string, targetAddonsDi
 		ImportedCount: importedCount,
 		Errors:        errors,
 	}
+}
+
+func (s *ImportService) importDirectory(dirPath, targetDir string) (int, []string) {
+	entries, err := os.ReadDir(dirPath)
+	if err != nil {
+		return 0, []string{fmt.Sprintf("读取目录 %s 失败: %v", filepath.Base(dirPath), err)}
+	}
+
+	count := 0
+	var errors []string
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		fullPath := filepath.Join(dirPath, name)
+		lower := strings.ToLower(name)
+
+		var itemErr error
+		if strings.HasSuffix(lower, ".tar.zst") || strings.HasSuffix(lower, ".zst") {
+			itemErr = s.extractTarZst(fullPath, targetDir)
+		} else if strings.HasSuffix(lower, ".zip") {
+			itemErr = s.extractZip(fullPath, targetDir)
+		} else if strings.HasSuffix(lower, ".7z") {
+			itemErr = s.extract7z(fullPath, targetDir)
+		} else if s.isVpkOrImage(name) {
+			itemErr = s.copyFileToDir(fullPath, targetDir)
+		} else {
+			continue
+		}
+
+		if itemErr != nil {
+			errors = append(errors, fmt.Sprintf("导入 %s 失败: %v", name, itemErr))
+		} else {
+			count++
+		}
+	}
+	return count, errors
+}
+
+func (s *ImportService) copyFileToDir(srcPath, targetDir string) error {
+	baseName := filepath.Base(srcPath)
+	destPath := filepath.Join(targetDir, baseName)
+	return copyFile(srcPath, destPath)
 }
 
 func (s *ImportService) extractZip(archivePath, targetDir string) error {

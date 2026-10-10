@@ -122,6 +122,68 @@ func (s *StorageService) SaveSftpSettings(settings models.SftpSettings) {
 	s.mu.Unlock()
 }
 
+func (s *StorageService) GetLaunchSettings() models.LaunchSettings {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	def := models.DefaultLaunchSettings()
+	val, ok := s.data["launch_settings"]
+	if !ok {
+		return def
+	}
+
+	bytes, err := json.Marshal(val)
+	if err != nil {
+		return def
+	}
+	var res models.LaunchSettings
+	if err := json.Unmarshal(bytes, &res); err != nil {
+		return def
+	}
+	return res
+}
+
+func (s *StorageService) SaveLaunchSettings(settings models.LaunchSettings) {
+	s.mu.Lock()
+	s.data["launch_settings"] = settings
+	s.save()
+	s.mu.Unlock()
+}
+
+func (s *StorageService) GetAiSettings() models.AiSettings {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	def := models.DefaultAiSettings()
+	val, ok := s.data["ai_settings"]
+	if !ok {
+		return def
+	}
+
+	bytes, err := json.Marshal(val)
+	if err != nil {
+		return def
+	}
+	var res models.AiSettings
+	if err := json.Unmarshal(bytes, &res); err != nil {
+		return def
+	}
+	if res.BaseURL == "" {
+		res.BaseURL = def.BaseURL
+	}
+	if res.Model == "" {
+		res.Model = def.Model
+	}
+	return res
+}
+
+func (s *StorageService) SaveAiSettings(settings models.AiSettings) {
+	s.mu.Lock()
+	s.data["ai_settings"] = settings
+	s.save()
+	s.mu.Unlock()
+}
+
 func (s *StorageService) GetStorageDir() string {
 	return s.storageDir
 }

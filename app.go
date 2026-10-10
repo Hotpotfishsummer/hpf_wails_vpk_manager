@@ -31,6 +31,10 @@ type App struct {
 	uploadService    *services.UploadService
 	downloadService  *services.DownloadService
 	restarterService *services.RestarterService
+	detectorService  *services.DetectorService
+	launcherService  *services.LauncherService
+	groupService     *services.GroupService
+	aiService        *services.AiService
 }
 
 // NewApp creates a new App application struct
@@ -38,6 +42,8 @@ func NewApp() *App {
 	storage := services.NewStorageService()
 	config := services.NewConfigService()
 	notes := services.NewNotesService()
+	group := services.NewGroupService()
+	ai := services.NewAiService()
 	meta := services.NewVpkMetadataService()
 	meta.SetNotesService(notes)
 	scan := services.NewScanService(meta)
@@ -48,11 +54,15 @@ func NewApp() *App {
 	upload := services.NewUploadService(meta, sftp, notes)
 	download := services.NewDownloadService(sftp)
 	restarter := services.NewRestarterService()
+	detector := services.NewDetectorService()
+	launcher := services.NewLauncherService(detector, storage)
 
 	return &App{
 		storageService:   storage,
 		configService:    config,
 		notesService:     notes,
+		groupService:     group,
+		aiService:        ai,
 		metaService:      meta,
 		scanService:      scan,
 		exportService:    export,
@@ -62,6 +72,8 @@ func NewApp() *App {
 		uploadService:    upload,
 		downloadService:  download,
 		restarterService: restarter,
+		detectorService:  detector,
+		launcherService:  launcher,
 	}
 }
 
@@ -77,6 +89,48 @@ func (a *App) shutdown(ctx context.Context) {
 // GetLastDirectory returns the last chosen L4D2 directory
 func (a *App) GetLastDirectory() string {
 	return a.storageService.GetL4D2Directory()
+}
+
+// DetectL4D2Directories automatically searches for Left 4 Dead 2 directories across processes, registry, shortcuts, and disks
+func (a *App) DetectL4D2Directories(deepScan bool) models.DetectGameResult {
+	clients := a.detectorService.DetectClients(deepScan)
+	return models.DetectGameResult{
+		ApiResult: models.ApiResult{
+			Success: true,
+		},
+		Clients: clients,
+	}
+}
+
+// ValidateL4D2Directory checks if a path is a valid L4D2 directory
+func (a *App) ValidateL4D2Directory(dir string) bool {
+	valid, _, _ := a.detectorService.ValidateL4D2Directory(dir)
+	return valid
+}
+
+// LaunchGame launches the game via Steam (if Steam client) or directly via executable
+func (a *App) LaunchGame() models.ApiResult {
+	l4d2Dir := a.storageService.GetL4D2Directory()
+	return a.launcherService.LaunchGame(l4d2Dir)
+}
+
+// IsSteamClient checks if a directory or current directory is from Steam
+func (a *App) IsSteamClient(directory string) bool {
+	if directory == "" {
+		directory = a.storageService.GetL4D2Directory()
+	}
+	return a.launcherService.IsSteamClient(directory)
+}
+
+// GetLaunchSettings returns game startup options
+func (a *App) GetLaunchSettings() models.LaunchSettings {
+	return a.storageService.GetLaunchSettings()
+}
+
+// SaveLaunchSettings saves game startup options
+func (a *App) SaveLaunchSettings(settings models.LaunchSettings) models.ApiResult {
+	a.storageService.SaveLaunchSettings(settings)
+	return models.ApiResult{Success: true}
 }
 
 // BrowseDirectory opens a native directory dialog
@@ -181,6 +235,31 @@ func (a *App) ImportCompressedVpks() models.ImportResult {
 	}
 
 	return a.importService.ImportCompressedFiles(files, addonsDir)
+}
+
+// ImportFiles imports chosen archive, VPK, or folder files directly into the addons directory
+func (a *App) ImportFiles(filePaths []string) models.ImportResult {
+	l4d2Dir := a.storageService.GetL4D2Directory()
+	if l4d2Dir == "" {
+		return models.ImportResult{
+			ApiResult: models.ApiResult{Success: false, Error: "请先选择 L4D2 安装目录"},
+		}
+	}
+
+	addonsDir := filepath.Join(l4d2Dir, "left4dead2", "addons")
+	if _, err := os.Stat(addonsDir); err != nil {
+		return models.ImportResult{
+			ApiResult: models.ApiResult{Success: false, Error: fmt.Sprintf("addons 目录不存在: %s", addonsDir)},
+		}
+	}
+
+	if len(filePaths) == 0 {
+		return models.ImportResult{
+			ApiResult: models.ApiResult{Success: false, Error: "未检测到拖入的文件"},
+		}
+	}
+
+	return a.importService.ImportCompressedFiles(filePaths, addonsDir)
 }
 
 // LocalizeWorkshopVpks copies workshop VPKs to local addons and moves originals to .trash
@@ -444,3 +523,54 @@ func (a *App) GetVpkNote(filePath string) string {
 func (a *App) GetAllVpkNotes() map[string]string {
 	return a.notesService.GetAllNotes()
 }
+
+// GetVpkGroups retrieves all saved VPK groups
+func (a *App) GetVpkGroups() []models.VpkGroup {
+	return a.groupService.GetGroups()
+}
+
+// SaveVpkGroups persists all VPK groups
+func (a *App) SaveVpkGroups(groups []models.VpkGroup) models.ApiResult {
+	if err := a.groupService.SaveGroups(groups); err != nil {
+		return models.ApiResult{Success: false, Error: err.Error()}
+	}
+	return models.ApiResult{Success: true, Message: "分组保存成功"}
+}
+
+// GetAiSettings retrieves the saved OpenAI API settings
+func (a *App) GetAiSettings() models.AiSettings {
+	return a.storageService.GetAiSettings()
+}
+
+// SaveAiSettings persists the OpenAI API settings
+func (a *App) SaveAiSettings(settings models.AiSettings) models.ApiResult {
+	a.storageService.SaveAiSettings(settings)
+	return models.ApiResult{Success: true, Message: "AI 配置保存成功"}
+}
+
+// TestAiConnection tests the OpenAI API configuration
+func (a *App) TestAiConnection(settings models.AiSettings) models.ApiResult {
+	return a.aiService.TestConnection(settings)
+}
+
+// PredictGroupName predicts a concise group name for selected VPK files
+func (a *App) PredictGroupName(files []models.VpkFile) models.GroupPredictResult {
+	settings := a.storageService.GetAiSettings()
+	return a.aiService.PredictGroupName(files, settings)
+}
+
+// AiChat performs a generic chat completion with user-configured OpenAI settings
+func (a *App) AiChat(req models.AiChatRequest) models.AiResult {
+	settings := a.storageService.GetAiSettings()
+	reply, err := a.aiService.ChatCompletion(a.ctx, req, settings)
+	if err != nil {
+		return models.AiResult{
+			ApiResult: models.ApiResult{Success: false, Error: err.Error()},
+		}
+	}
+	return models.AiResult{
+		ApiResult: models.ApiResult{Success: true},
+		Content:   reply,
+	}
+}
+

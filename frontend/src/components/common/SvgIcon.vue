@@ -20,6 +20,11 @@
       <rect x="2" y="6" width="20" height="12" rx="6"></rect>
     </g>
 
+    <!-- Play / Launch Game -->
+    <g v-else-if="name === 'play'">
+      <polygon points="5 3 19 12 5 21 5 3" fill="currentColor"></polygon>
+    </g>
+
     <!-- Map -->
     <g v-else-if="name === 'map'">
       <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"></polygon>
@@ -234,6 +239,88 @@
     <g v-else-if="name === 'edit'">
       <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path>
       <path d="m15 5 4 4"></path>
+    </g>
+
+    <!-- Compass / Auto Detect -->
+    <g v-else-if="name === 'compass'">
+      <circle cx="12" cy="12" r="10"></circle>
+      <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon>
+    </g>
+
+    <!-- Hard Drive / Disk -->
+    <g v-else-if="name === 'hard-drive'">
+      <line x1="22" y1="12" x2="2" y2="12"></line>
+      <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path>
+      <line x1="6" y1="16" x2="6.01" y2="16"></line>
+      <line x1="10" y1="16" x2="10.01" y2="16"></line>
+    </g>
+
+    <!-- Book Open / Guide -->
+    <g v-else-if="name === 'book-open'">
+      <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
+      <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path>
+    </g>
+
+    <!-- Layers / Group -->
+    <g v-else-if="name === 'layers'">
+      <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+      <polyline points="2 17 12 22 22 17"></polyline>
+      <polyline points="2 12 12 17 22 12"></polyline>
+    </g>
+
+    <!-- Folder Plus -->
+    <g v-else-if="name === 'folder-plus'">
+      <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"></path>
+      <line x1="12" y1="10" x2="12" y2="16"></line>
+      <line x1="9" y1="13" x2="15" y2="13"></line>
+    </g>
+
+    <!-- Folder Minus / Ungroup -->
+    <g v-else-if="name === 'folder-minus'">
+      <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"></path>
+      <line x1="9" y1="13" x2="15" y2="13"></line>
+    </g>
+
+    <!-- Palette -->
+    <g v-else-if="name === 'palette'">
+      <circle cx="13.5" cy="6.5" r=".5" fill="currentColor"></circle>
+      <circle cx="17.5" cy="10.5" r=".5" fill="currentColor"></circle>
+      <circle cx="8.5" cy="7.5" r=".5" fill="currentColor"></circle>
+      <circle cx="6.5" cy="12.5" r=".5" fill="currentColor"></circle>
+      <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"></path>
+    </g>
+
+    <!-- Sparkles / AI -->
+    <g v-else-if="name === 'sparkles'">
+      <path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"></path>
+      <path d="M19 5v4"></path>
+      <path d="M21 7h-4"></path>
+      <path d="M5 19v2"></path>
+      <path d="M6 20H4"></path>
+    </g>
+
+    <!-- Cpu / Heuristic -->
+    <g v-else-if="name === 'cpu'">
+      <rect x="4" y="4" width="16" height="16" rx="2"></rect>
+      <rect x="9" y="9" width="6" height="6"></rect>
+      <path d="M15 2v2"></path>
+      <path d="M15 20v2"></path>
+      <path d="M2 15h2"></path>
+      <path d="M2 9h2"></path>
+      <path d="M20 15h2"></path>
+      <path d="M20 9h2"></path>
+      <path d="M9 2v2"></path>
+      <path d="M9 20v2"></path>
+    </g>
+
+    <!-- Bot / AI Base -->
+    <g v-else-if="name === 'bot'">
+      <path d="M12 8V4H8"></path>
+      <rect width="16" height="12" x="4" y="8" rx="2"></rect>
+      <path d="M2 14h2"></path>
+      <path d="M20 14h2"></path>
+      <path d="M15 13v2"></path>
+      <path d="M9 13v2"></path>
     </g>
   </svg>
 </template>

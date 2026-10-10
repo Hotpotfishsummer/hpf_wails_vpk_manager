@@ -27,6 +27,10 @@ func main() {
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
+		DragAndDrop: &options.DragAndDrop{
+			EnableFileDrop:     true,
+			DisableWebViewDrop: true,
+		},
 		Windows: &windows.Options{
 			WebviewIsTransparent: false,
 			WindowIsTranslucent:  false,

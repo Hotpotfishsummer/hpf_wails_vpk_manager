@@ -8,6 +8,7 @@ require (
 	github.com/pkg/sftp v1.13.11
 	github.com/wailsapp/wails/v2 v2.16.0
 	golang.org/x/crypto v0.58.0
+	golang.org/x/sys v0.49.0
 	golang.org/x/text v0.43.0
 )
 
@@ -47,7 +48,6 @@ require (
 	github.com/wailsapp/mimetype v1.4.1 // indirect
 	go4.org v0.0.0-20260112195520-a5071408f32f // indirect
 	golang.org/x/net v0.60.0 // indirect
-	golang.org/x/sys v0.49.0 // indirect
 )
 
 // replace github.com/wailsapp/wails/v2 v2.16.0 => C:\Users\HOTPOTFISH\go\pkg\mod

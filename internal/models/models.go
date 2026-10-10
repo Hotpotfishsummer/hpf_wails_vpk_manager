@@ -104,3 +104,94 @@ type SftpSettings struct {
 	Password   string `json:"password"`
 	AddonsPath string `json:"addons_path"`
 }
+
+// DetectedGameClient represents a detected Left 4 Dead 2 installation
+type DetectedGameClient struct {
+	Path         string `json:"path"`
+	ExePath      string `json:"exe_path"`
+	Source       string `json:"source"`
+	SourceName   string `json:"source_name"`
+	ModCount     int    `json:"mod_count"`
+	HasWorkshop  bool   `json:"has_workshop"`
+	LastModified int64  `json:"last_modified"`
+}
+
+// DetectGameResult contains detected clients list
+type DetectGameResult struct {
+	ApiResult
+	Clients []DetectedGameClient `json:"clients"`
+}
+
+// LaunchSettings represents game startup parameters configuration
+type LaunchSettings struct {
+	NoVid        bool   `json:"novid"`          // 跳过片头动画 (-novid)
+	ChineseLang  bool   `json:"chinese_lang"`   // 强制中文启动 (-language schinese)
+	DirectLaunch bool   `json:"direct_launch"`  // 强制直接启动主程序 (跳过 Steam 唤起)
+	CustomArgs   string `json:"custom_args"`    // 自定义额外参数
+}
+
+func DefaultLaunchSettings() LaunchSettings {
+	return LaunchSettings{
+		NoVid:        true,
+		ChineseLang:  true,
+		DirectLaunch: false,
+		CustomArgs:   "",
+	}
+}
+
+// VpkGroup represents a user-defined group of VPK files
+type VpkGroup struct {
+	ID        string   `json:"id"`
+	Name      string   `json:"name"`
+	Color     string   `json:"color"`
+	Collapsed bool     `json:"collapsed"`
+	FileKeys  []string `json:"file_keys"`
+}
+
+// AiSettings represents configuration for OpenAI-compatible API
+type AiSettings struct {
+	ApiKey      string  `json:"api_key"`
+	BaseURL     string  `json:"base_url"`
+	Model       string  `json:"model"`
+	Temperature float64 `json:"temperature"`
+	MaxTokens   int     `json:"max_tokens"`
+}
+
+func DefaultAiSettings() AiSettings {
+	return AiSettings{
+		ApiKey:      "",
+		BaseURL:     "https://api.openai.com/v1",
+		Model:       "gpt-4o-mini",
+		Temperature: 0.7,
+		MaxTokens:   500,
+	}
+}
+
+// AiChatMessage represents chat message for completions
+type AiChatMessage struct {
+	Role    string `json:"role"` // "system", "user", "assistant"
+	Content string `json:"content"`
+}
+
+// AiChatRequest represents OpenAI chat completions request payload
+type AiChatRequest struct {
+	Model       string          `json:"model"`
+	Messages    []AiChatMessage `json:"messages"`
+	Temperature float64         `json:"temperature,omitempty"`
+	MaxTokens   int             `json:"max_tokens,omitempty"`
+}
+
+// AiResult represents generic result returned to frontend
+type AiResult struct {
+	ApiResult
+	Content string `json:"content,omitempty"`
+}
+
+// GroupPredictResult represents result of group prediction
+type GroupPredictResult struct {
+	ApiResult
+	PredictedName string `json:"predicted_name"`
+	Reason        string `json:"reason,omitempty"`
+	Source        string `json:"source"` // "ai" or "heuristic"
+}
+

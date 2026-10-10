@@ -68,3 +68,68 @@ export interface DownloadResult extends ApiResult {
 export interface UploadResult extends ApiResult {
   uploaded_count?: number
 }
+
+/** 自动探测到的 L4D2 客户端 */
+export interface DetectedGameClient {
+  path: string
+  exe_path: string
+  source: string
+  source_name: string
+  mod_count: number
+  has_workshop: boolean
+  last_modified: number
+}
+
+/** detect_l4d2_directories */
+export interface DetectGameResult extends ApiResult {
+  clients: DetectedGameClient[]
+}
+
+/** 游戏启动设置选项 */
+export interface LaunchSettings {
+  novid: boolean
+  chinese_lang: boolean
+  direct_launch: boolean
+  custom_args: string
+}
+
+/** VPK 自定义分组 */
+export interface VpkGroup {
+  id: string
+  name: string
+  color: string
+  collapsed?: boolean
+  file_keys: string[]
+}
+
+/** OpenAI 兼容大模型 API 设置 */
+export interface AiSettings {
+  api_key: string
+  base_url: string
+  model: string
+  temperature: number
+  max_tokens: number
+}
+
+export interface AiChatMessage {
+  role: string
+  content: string
+}
+
+export interface AiChatRequest {
+  model: string
+  messages: AiChatMessage[]
+  temperature?: number
+  max_tokens?: number
+}
+
+export interface AiResult extends ApiResult {
+  content?: string
+}
+
+export interface GroupPredictResult extends ApiResult {
+  predicted_name: string
+  reason?: string
+  source: 'ai' | 'heuristic'
+}
+

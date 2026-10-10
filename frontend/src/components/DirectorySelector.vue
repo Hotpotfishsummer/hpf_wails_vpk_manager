@@ -38,11 +38,24 @@
           :disabled="!store.currentDirectory || store.isImporting"
           class="btn-import-box"
           :class="{ 'btn-loading': store.isImporting }"
-          :title="!store.currentDirectory ? $t('needSelectL4d2') : $t('importFiles')"
+          :title="!store.currentDirectory ? $t('needSelectL4d2') : $t('importFilesTooltip')"
         >
           <SvgIcon v-if="store.isImporting" name="loader" :size="15" :spin="true" />
           <SvgIcon v-else name="import" :size="15" />
           <span>{{ store.isImporting ? $t('importing') : $t('importFiles') }}</span>
+        </button>
+
+        <!-- 自动搜索客户端按钮 -->
+        <button
+          @click="handleAutoDetect"
+          :disabled="store.isDetecting || store.isDeepDetecting"
+          class="btn-detect-box"
+          :class="{ 'btn-loading': store.isDetecting || store.isDeepDetecting }"
+          :title="$t('autoDetectTooltip')"
+        >
+          <SvgIcon v-if="store.isDetecting || store.isDeepDetecting" name="loader" :size="15" :spin="true" />
+          <SvgIcon v-else name="compass" :size="15" />
+          <span>{{ store.isDetecting || store.isDeepDetecting ? $t('detecting') : $t('autoDetect') }}</span>
         </button>
 
         <!-- 浏览并选择安装目录按钮 -->
@@ -57,6 +70,21 @@
           <SvgIcon v-else name="folder-open" :size="15" />
           <span>{{ isLoading ? $t('browsing') : $t('browseFolder') }}</span>
         </button>
+
+        <!-- 启动游戏按钮 -->
+        <button
+          @click="store.launchGame"
+          :disabled="!store.currentDirectory || store.isLaunchingGame"
+          class="btn-launch-box"
+          :class="{ 'btn-loading': store.isLaunchingGame }"
+          :title="launchTooltip"
+        >
+          <SvgIcon v-if="store.isLaunchingGame" name="loader" :size="14" :spin="true" />
+          <SvgIcon v-else name="play" :size="13" />
+          <span>{{ store.isLaunchingGame ? $t('launchingGame') : $t('launchGame') }}</span>
+          <span v-if="store.currentDirectory && isSteamLaunchMode" class="steam-tag">{{ $t('launchTagSteam') }}</span>
+          <span v-else-if="store.currentDirectory" class="direct-tag">{{ $t('launchTagDirect') }}</span>
+        </button>
       </div>
     </div>
   </div>
@@ -65,7 +93,7 @@
 <script setup lang="ts">
 import { useVpkManagerStore } from '@/stores/vpk-manager'
 import { useI18n } from 'vue-i18n'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { getApi } from '@/composables/useApi'
 import SvgIcon from '@/components/common/SvgIcon.vue'
 
@@ -73,6 +101,15 @@ const { t: $t } = useI18n()
 const store = useVpkManagerStore()
 const isLoading = ref(false)
 const copied = ref(false)
+
+const isSteamLaunchMode = computed(() => {
+  return store.isCurrentSteamClient && !store.launchSettings.direct_launch
+})
+
+const launchTooltip = computed(() => {
+  if (!store.currentDirectory) return $t('needSelectL4d2')
+  return isSteamLaunchMode.value ? $t('launchGameTooltipSteam') : $t('launchGameTooltipDirect')
+})
 
 async function handleCopyPath() {
   if (!store.currentDirectory) return
@@ -129,6 +166,10 @@ async function handleBrowse() {
   } finally {
     isLoading.value = false
   }
+}
+
+function handleAutoDetect() {
+  store.detectGameDirectories(false)
 }
 </script>
 
@@ -235,6 +276,29 @@ async function handleBrowse() {
   box-shadow: 0 0 12px var(--accent-success-glow);
 }
 
+/* 自动探测按钮 */
+.btn-detect-box {
+  height: 36px;
+  padding: 0 14px;
+  border-radius: var(--radius-md);
+  background: rgba(168, 85, 247, 0.12);
+  color: #c084fc;
+  border: 1px solid rgba(168, 85, 247, 0.35);
+  font-weight: 600;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.btn-detect-box:hover:not(:disabled) {
+  background: rgba(168, 85, 247, 0.22);
+  border-color: rgba(168, 85, 247, 0.6);
+  box-shadow: 0 0 12px rgba(168, 85, 247, 0.3);
+}
+
 /* 浏览文件夹主按钮 */
 .btn-browse-box {
   height: 36px;
@@ -251,5 +315,55 @@ async function handleBrowse() {
 .btn-browse-box:hover:not(:disabled) {
   background: linear-gradient(135deg, #0369a1 0%, #075985 100%);
   box-shadow: 0 4px 14px rgba(2, 132, 199, 0.5);
+}
+
+/* 启动游戏主按钮 */
+.btn-launch-box {
+  height: 36px;
+  padding: 0 16px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: #fff;
+  border: 1px solid rgba(52, 211, 153, 0.4);
+  font-weight: 700;
+  font-size: 13px;
+  box-shadow: 0 2px 10px rgba(16, 185, 129, 0.35);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.btn-launch-box:hover:not(:disabled) {
+  filter: brightness(1.15);
+  box-shadow: 0 0 16px rgba(16, 185, 129, 0.6);
+  transform: translateY(-1px);
+}
+
+.btn-launch-box:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  filter: grayscale(0.5);
+}
+
+.steam-tag {
+  font-size: 10px;
+  padding: 1px 5px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 3px;
+  color: #a7f3d0;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+.direct-tag {
+  font-size: 10px;
+  padding: 1px 5px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 3px;
+  color: #fed7aa;
+  font-weight: 800;
+  letter-spacing: 0.5px;
 }
 </style>

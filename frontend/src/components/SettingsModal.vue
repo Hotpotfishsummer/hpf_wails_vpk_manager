@@ -59,6 +59,75 @@
             </div>
           </div>
 
+          <!-- 游戏启动设置 -->
+          <div class="settings-section">
+            <div class="section-header-row">
+              <h3 class="section-subtitle">{{ $t('launchSettings') }}</h3>
+              <p class="section-desc">{{ $t('launchSettingsDesc') }}</p>
+            </div>
+
+            <!-- 跳过片头动画 (-novid) -->
+            <div class="settings-item action-item">
+              <div class="setting-text">
+                <span class="setting-title">{{ $t('launchNoVid') }}</span>
+                <p class="setting-item-desc">{{ $t('launchNoVidDesc') }}</p>
+              </div>
+              <label class="switch-control">
+                <input
+                  type="checkbox"
+                  v-model="store.launchSettings.novid"
+                  @change="store.saveLaunchSettings()"
+                />
+                <span class="switch-slider"></span>
+              </label>
+            </div>
+
+            <!-- 强制中文启动 (-language schinese) -->
+            <div class="settings-item action-item">
+              <div class="setting-text">
+                <span class="setting-title">{{ $t('launchChineseLang') }}</span>
+                <p class="setting-item-desc">{{ $t('launchChineseLangDesc') }}</p>
+              </div>
+              <label class="switch-control">
+                <input
+                  type="checkbox"
+                  v-model="store.launchSettings.chinese_lang"
+                  @change="store.saveLaunchSettings()"
+                />
+                <span class="switch-slider"></span>
+              </label>
+            </div>
+
+            <!-- 优先本地直接运行 (不通过 Steam 协议) -->
+            <div class="settings-item action-item">
+              <div class="setting-text">
+                <span class="setting-title">{{ $t('launchDirectMode') }}</span>
+                <p class="setting-item-desc">{{ $t('launchDirectModeDesc') }}</p>
+              </div>
+              <label class="switch-control">
+                <input
+                  type="checkbox"
+                  v-model="store.launchSettings.direct_launch"
+                  @change="store.saveLaunchSettings()"
+                />
+                <span class="switch-slider"></span>
+              </label>
+            </div>
+
+            <!-- 自定义额外启动参数 -->
+            <div class="settings-field full-width">
+              <label class="setting-label">{{ $t('launchCustomArgs') }}</label>
+              <input
+                type="text"
+                v-model="store.launchSettings.custom_args"
+                @change="store.saveLaunchSettings()"
+                class="setting-input"
+                :placeholder="$t('launchCustomArgsPlaceholder')"
+              />
+              <span class="field-hint">{{ $t('launchCustomArgsDesc') }}</span>
+            </div>
+          </div>
+
           <!-- SFTP 设置 -->
           <div class="settings-section">
             <div class="section-header-row">
@@ -133,6 +202,99 @@
               </span>
             </div>
           </div>
+
+          <!-- AI 大模型接入 (OpenAI 兼容) -->
+          <div class="settings-section">
+            <div class="section-header-row">
+              <h3 class="section-subtitle">{{ $t('aiSettingsTitle') }}</h3>
+              <p class="section-desc">{{ $t('aiSettingsDesc') }}</p>
+            </div>
+
+            <div class="form-grid">
+              <div class="settings-field full-width">
+                <label class="setting-label">{{ $t('aiBaseUrl') }}</label>
+                <input
+                  type="text"
+                  v-model="store.aiSettings.base_url"
+                  @change="store.saveAiSettings()"
+                  class="setting-input"
+                  placeholder="https://api.openai.com/v1"
+                />
+                <span class="field-hint">{{ $t('aiBaseUrlHint') }}</span>
+              </div>
+
+              <div class="settings-field full-width">
+                <label class="setting-label">{{ $t('aiApiKey') }}</label>
+                <input
+                  type="password"
+                  v-model="store.aiSettings.api_key"
+                  @change="store.saveAiSettings()"
+                  class="setting-input"
+                  placeholder="sk-••••••••"
+                />
+              </div>
+
+              <div class="settings-field">
+                <label class="setting-label">{{ $t('aiModel') }}</label>
+                <input
+                  type="text"
+                  v-model="store.aiSettings.model"
+                  @change="store.saveAiSettings()"
+                  class="setting-input"
+                  placeholder="gpt-4o-mini"
+                />
+              </div>
+
+              <div class="settings-field">
+                <label class="setting-label">{{ $t('aiTemperature') }}</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  max="2"
+                  v-model.number="store.aiSettings.temperature"
+                  @change="store.saveAiSettings()"
+                  class="setting-input"
+                  placeholder="0.7"
+                />
+              </div>
+
+              <div class="settings-field">
+                <label class="setting-label">{{ $t('aiMaxTokens') }}</label>
+                <input
+                  type="number"
+                  step="50"
+                  min="50"
+                  max="4096"
+                  v-model.number="store.aiSettings.max_tokens"
+                  @change="store.saveAiSettings()"
+                  class="setting-input"
+                  placeholder="500"
+                />
+              </div>
+            </div>
+
+            <!-- AI 连接测试 -->
+            <div class="connection-test-row">
+              <button
+                class="btn-test-conn"
+                :disabled="isTestingAi"
+                @click="handleTestAiConnection"
+              >
+                <SvgIcon v-if="isTestingAi" name="loader" :size="14" :spin="true" />
+                <SvgIcon v-else name="sparkles" :size="14" />
+                <span>{{ isTestingAi ? $t('aiTesting') : $t('aiTestConnection') }}</span>
+              </button>
+
+              <span
+                v-if="aiTestResult"
+                class="test-result-badge"
+                :class="aiTestResult.ok ? 'test-ok' : 'test-fail'"
+              >
+                {{ aiTestResult.message }}
+              </span>
+            </div>
+          </div>
         </div>
 
         <div class="modal-footer">
@@ -161,6 +323,9 @@ const { t: $t } = useI18n()
 const isResetting = ref(false)
 const isTestingConnection = ref(false)
 const connectionTestResult = ref<{ ok: boolean; message: string } | null>(null)
+
+const isTestingAi = ref(false)
+const aiTestResult = ref<{ ok: boolean; message: string } | null>(null)
 
 async function handleResetData() {
   const confirmed = await store.showConfirm($t('confirmResetAppData'))
@@ -203,6 +368,39 @@ async function handleTestConnection() {
     }
   } finally {
     isTestingConnection.value = false
+  }
+}
+
+async function handleTestAiConnection() {
+  if (!store.aiSettings.api_key?.trim()) {
+    aiTestResult.value = {
+      ok: false,
+      message: $t('aiKeyRequired'),
+    }
+    return
+  }
+  isTestingAi.value = true
+  aiTestResult.value = null
+  try {
+    const res = await store.testAiConnection()
+    if (res.success) {
+      aiTestResult.value = {
+        ok: true,
+        message: res.message || $t('aiConnectSuccess'),
+      }
+    } else {
+      aiTestResult.value = {
+        ok: false,
+        message: res.error || $t('aiConnectFailed'),
+      }
+    }
+  } catch (e: any) {
+    aiTestResult.value = {
+      ok: false,
+      message: e?.message || $t('aiConnectFailed'),
+    }
+  } finally {
+    isTestingAi.value = false
   }
 }
 </script>
@@ -506,6 +704,69 @@ async function handleTestConnection() {
   background: rgba(244, 63, 94, 0.2);
   color: #fb7185;
   border: 1px solid rgba(244, 63, 94, 0.4);
+}
+
+/* 优雅的拨动开关组件 */
+.switch-control {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.switch-control input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.switch-slider {
+  position: absolute;
+  inset: 0;
+  background-color: #1e293b;
+  border: 1.5px solid #334155;
+  border-radius: 24px;
+  transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.switch-slider::before {
+  position: absolute;
+  content: "";
+  height: 16px;
+  width: 16px;
+  left: 2px;
+  bottom: 2px;
+  background-color: #94a3b8;
+  border-radius: 50%;
+  transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+.switch-control input:checked + .switch-slider {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  border-color: #34d399;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.35);
+}
+
+.switch-control input:checked + .switch-slider::before {
+  transform: translateX(20px);
+  background-color: #ffffff;
+}
+
+.switch-control:hover .switch-slider {
+  border-color: #475569;
+}
+
+.switch-control input:checked:hover + .switch-slider {
+  border-color: #6ee7b7;
+}
+
+.field-hint {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 2px;
 }
 
 .modal-footer {

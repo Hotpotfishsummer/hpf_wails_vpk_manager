@@ -5,7 +5,9 @@
       'is-disabled': vpk.is_disabled,
       'is-selected': isSelected,
       'is-compact': store.viewMode === 'compact',
+      'is-grouped': !!group,
     }"
+    :style="itemStyle"
     :title="cardHoverTitle"
     @click="handleCardClick"
   >
@@ -111,6 +113,25 @@
             <SvgIcon name="edit" :size="10" />
             <span class="note-text">{{ vpk.note }}</span>
           </span>
+
+          <!-- 分组标签 -->
+          <span
+            v-if="group"
+            class="group-pill"
+            :style="{ '--badge-color': group.color }"
+            :title="$t('group') + ': ' + group.name"
+            @click.stop="openGroupAction"
+          >
+            <span class="group-pill-dot" :style="{ backgroundColor: group.color }"></span>
+            <span class="group-pill-text">{{ group.name }}</span>
+            <button
+              class="group-pill-remove"
+              :title="$t('removeFromGroup')"
+              @click.stop="removeThisFromGroup"
+            >
+              <SvgIcon name="x" :size="9" />
+            </button>
+          </span>
         </div>
         <span class="compact-filename" :title="vpk.name">{{ vpk.name }}</span>
       </div>
@@ -130,6 +151,22 @@
 
       <!-- 快捷操作按钮 -->
       <div class="item-actions compact-actions" @click.stop>
+        <button
+          v-if="group"
+          class="action-btn-circle ungroup"
+          :title="$t('removeFromGroup')"
+          @click="removeThisFromGroup"
+        >
+          <SvgIcon name="folder-minus" :size="13" />
+        </button>
+        <button
+          v-else
+          class="action-btn-circle group-add"
+          :title="$t('addToGroup')"
+          @click="openGroupAction"
+        >
+          <SvgIcon name="layers" :size="13" />
+        </button>
         <button
           class="action-btn-circle note"
           :title="$t('editNote')"
@@ -291,6 +328,25 @@
             <SvgIcon name="edit" :size="11" />
             <span class="note-text">{{ vpk.note }}</span>
           </span>
+
+          <!-- 分组标签 -->
+          <span
+            v-if="group"
+            class="group-badge"
+            :style="{ '--badge-color': group.color }"
+            :title="$t('group') + ': ' + group.name"
+            @click.stop="openGroupAction"
+          >
+            <span class="group-badge-dot" :style="{ backgroundColor: group.color }"></span>
+            <span class="group-badge-text">{{ group.name }}</span>
+            <button
+              class="group-badge-remove"
+              :title="$t('removeFromGroup')"
+              @click.stop="removeThisFromGroup"
+            >
+              <SvgIcon name="x" :size="9" />
+            </button>
+          </span>
         </div>
 
         <div class="tag-row" v-if="workshopId">
@@ -307,6 +363,22 @@
 
       <!-- 操作按钮组 -->
       <div class="item-actions" @click.stop>
+        <button
+          v-if="group"
+          class="action-btn-circle ungroup"
+          :title="$t('removeFromGroup')"
+          @click="removeThisFromGroup"
+        >
+          <SvgIcon name="folder-minus" :size="15" />
+        </button>
+        <button
+          v-else
+          class="action-btn-circle group-add"
+          :title="$t('addToGroup')"
+          @click="openGroupAction"
+        >
+          <SvgIcon name="layers" :size="15" />
+        </button>
         <button
           class="action-btn-circle note"
           :title="$t('editNote')"
@@ -406,7 +478,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { VpkFile, MapInfo, useVpkManagerStore } from '@/stores/vpk-manager'
+import { VpkFile, MapInfo, useVpkManagerStore, hexToRgb } from '@/stores/vpk-manager'
 import { callApi } from '@/composables/useApi'
 import { useI18n } from 'vue-i18n'
 import SvgIcon from '@/components/common/SvgIcon.vue'
@@ -427,6 +499,32 @@ const emit = defineEmits<{
 const store = useVpkManagerStore()
 const { t: $t } = useI18n()
 const isLightboxOpen = ref(false)
+
+const group = computed(() => store.getFileGroup(props.vpk.path))
+
+const itemStyle = computed(() => {
+  if (!group.value) return {}
+  const rgb = hexToRgb(group.value.color)
+  return {
+    '--group-color': group.value.color,
+    '--group-rgb': rgb,
+  }
+})
+
+function removeThisFromGroup() {
+  store.removeFilesFromGroups([props.vpk.path])
+}
+
+function openGroupAction() {
+  if (!group.value) {
+    if (!props.isSelected) {
+      emit('toggle')
+    }
+    store.openGroupModal('assign')
+  } else {
+    store.openGroupModal('edit', group.value.id)
+  }
+}
 
 const isNoteModalOpen = ref(false)
 const tempNote = ref('')
@@ -1418,5 +1516,155 @@ const cardHoverTitle = computed(() => {
 @keyframes modalScale {
   from { transform: scale(0.96); opacity: 0; }
   to { transform: scale(1); opacity: 1; }
+}
+
+/* ==================== 分组样式与高亮 ==================== */
+.vpk-file-item.is-grouped {
+  background: rgba(var(--group-rgb), 0.08) !important;
+  border-color: rgba(var(--group-rgb), 0.35) !important;
+}
+
+.vpk-file-item.is-grouped:hover {
+  background: rgba(var(--group-rgb), 0.15) !important;
+  border-color: rgba(var(--group-rgb), 0.6) !important;
+  box-shadow: 0 0 16px rgba(var(--group-rgb), 0.22);
+}
+
+.vpk-file-item.is-grouped.is-selected {
+  background: rgba(var(--group-rgb), 0.22) !important;
+  border-color: var(--group-color) !important;
+  box-shadow: 0 0 0 1px var(--group-color), 0 0 16px rgba(var(--group-rgb), 0.35);
+}
+
+.vpk-file-item.is-grouped.is-compact {
+  border-left: 3.5px solid var(--group-color) !important;
+  background: rgba(var(--group-rgb), 0.07) !important;
+}
+
+.vpk-file-item.is-grouped.is-compact:hover {
+  background: rgba(var(--group-rgb), 0.14) !important;
+}
+
+.vpk-file-item.is-grouped.is-compact.is-selected {
+  background: rgba(var(--group-rgb), 0.22) !important;
+}
+
+/* 分组徽章 (Card Mode) */
+.group-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(var(--group-rgb), 0.15);
+  border: 1px solid rgba(var(--group-rgb), 0.4);
+  color: var(--group-color);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 7px 2px 8px;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.group-badge:hover {
+  background: rgba(var(--group-rgb), 0.28);
+  border-color: var(--group-color);
+}
+
+.group-badge-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.group-badge-text {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.group-badge-remove {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: inherit;
+  opacity: 0.65;
+  background: transparent;
+  transition: all var(--transition-fast);
+  margin-left: 2px;
+}
+
+.group-badge-remove:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+/* 分组胶囊 (Compact Mode) */
+.group-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(var(--group-rgb), 0.15);
+  border: 1px solid rgba(var(--group-rgb), 0.35);
+  color: var(--group-color);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px 1px 6px;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.group-pill:hover {
+  background: rgba(var(--group-rgb), 0.26);
+}
+
+.group-pill-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.group-pill-text {
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.group-pill-remove {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: inherit;
+  opacity: 0.6;
+  background: transparent;
+  transition: all var(--transition-fast);
+}
+
+.group-pill-remove:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+/* 按钮悬停状态 */
+.action-btn-circle.ungroup:hover {
+  background: rgba(244, 63, 94, 0.2);
+  color: var(--accent-danger);
+  border-color: rgba(244, 63, 94, 0.4);
+}
+
+.action-btn-circle.group-add:hover {
+  background: rgba(56, 189, 248, 0.2);
+  color: var(--accent-primary);
+  border-color: rgba(56, 189, 248, 0.4);
 }
 </style>

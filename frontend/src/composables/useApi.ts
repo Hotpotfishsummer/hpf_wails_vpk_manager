@@ -11,6 +11,14 @@ import type {
   RemoteListResult,
   ScanResult,
   UploadResult,
+  DetectGameResult,
+  LaunchSettings,
+  VpkGroup,
+  AiSettings,
+  AiChatRequest,
+  AiResult,
+  GroupPredictResult,
+  VpkFile,
 } from '@/types/api'
 
 // 监听 Wails 后端推送的导出进度事件
@@ -36,6 +44,7 @@ const wailsAdapter = {
   export_vpks: (file_paths: string[], output_dir: string, better_naming = false, overwrite = false) =>
     AppApi.ExportVpks(file_paths, output_dir, better_naming, overwrite) as Promise<ExportResult>,
   import_compressed_vpks: () => AppApi.ImportCompressedVpks() as Promise<ImportResult>,
+  import_files: (file_paths: string[]) => AppApi.ImportFiles(file_paths) as Promise<ImportResult>,
   localize_workshop_vpks: (file_paths: string[], better_naming = false) =>
     AppApi.LocalizeWorkshopVpks(file_paths, better_naming) as Promise<LocalizeResult>,
   open_directory: (path: string) => AppApi.OpenDirectory(path),
@@ -64,6 +73,27 @@ const wailsAdapter = {
   set_vpk_note: (file_path: string, note: string) => AppApi.SetVpkNote(file_path, note) as Promise<ApiResult>,
   get_vpk_note: (file_path: string) => AppApi.GetVpkNote(file_path) as Promise<string>,
   get_all_vpk_notes: () => AppApi.GetAllVpkNotes() as Promise<Record<string, string>>,
+  detect_l4d2_directories: (deepScan = false) =>
+    AppApi.DetectL4D2Directories(deepScan) as Promise<DetectGameResult>,
+  validate_l4d2_directory: (dir: string) =>
+    AppApi.ValidateL4D2Directory(dir) as Promise<boolean>,
+  launch_game: () => AppApi.LaunchGame() as Promise<ApiResult>,
+  is_steam_client: (dir = '') => AppApi.IsSteamClient(dir) as Promise<boolean>,
+  get_launch_settings: () => AppApi.GetLaunchSettings() as Promise<LaunchSettings>,
+  save_launch_settings: (settings: LaunchSettings) =>
+    AppApi.SaveLaunchSettings(settings as any) as Promise<ApiResult>,
+  get_vpk_groups: () => AppApi.GetVpkGroups() as Promise<VpkGroup[]>,
+  save_vpk_groups: (groups: VpkGroup[]) =>
+    AppApi.SaveVpkGroups(groups as any) as Promise<ApiResult>,
+  get_ai_settings: () => AppApi.GetAiSettings() as Promise<AiSettings>,
+  save_ai_settings: (settings: AiSettings) =>
+    AppApi.SaveAiSettings(settings as any) as Promise<ApiResult>,
+  test_ai_connection: (settings: AiSettings) =>
+    AppApi.TestAiConnection(settings as any) as Promise<ApiResult>,
+  predict_group_name: (files: VpkFile[]) =>
+    AppApi.PredictGroupName(files as any) as Promise<GroupPredictResult>,
+  ai_chat: (req: AiChatRequest) =>
+    AppApi.AiChat(req as any) as Promise<AiResult>,
 }
 
 export type PyWebViewApi = typeof wailsAdapter

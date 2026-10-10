@@ -57,18 +57,103 @@
               </span>
             </div>
 
-            <!-- 文件列表 -->
-            <div class="items-container">
-              <VpkFileItem
-                v-for="vpk in files"
-                :key="vpk.path"
-                :vpk="vpk"
-                :is-selected="selectedSet.has(vpk.path)"
-                @toggle="$emit('toggle-select', vpk.path)"
-                @enable="$emit('enable', $event)"
-                @disable="$emit('disable', $event)"
-                @delete="$emit('delete', $event)"
-              />
+            <!-- 分组卡片列表 (如果有分组) -->
+            <div v-if="displayGroups.length > 0" class="groups-container">
+              <div
+                v-for="item in displayGroups"
+                :key="item.group.id"
+                class="vpk-group-card"
+                :class="{ 'is-collapsed': item.group.collapsed }"
+                :style="{
+                  '--group-color': item.group.color,
+                  '--group-rgb': hexToRgb(item.group.color),
+                }"
+              >
+                <!-- 分组头部 -->
+                <div class="group-header" @click="store.toggleGroupCollapse(item.group.id)">
+                  <div class="group-header-left">
+                    <span class="group-chevron" :class="{ 'is-collapsed': item.group.collapsed }">
+                      <SvgIcon name="chevron-down" :size="15" />
+                    </span>
+
+                    <label class="custom-checkbox group-checkbox" @click.stop>
+                      <input
+                        type="checkbox"
+                        :checked="item.allSelected"
+                        @change="toggleGroupSelect(item)"
+                      />
+                      <span class="checkbox-mark" :class="{ 'is-checked': item.allSelected }">
+                        <SvgIcon v-if="item.allSelected" name="check" :size="11" stroke-width="3.2" class="check-icon" />
+                        <span v-else-if="item.someSelected" class="indeterminate-bar"></span>
+                      </span>
+                    </label>
+
+                    <span class="group-dot" :style="{ backgroundColor: item.group.color }"></span>
+                    <span class="group-title" :title="item.group.name">{{ item.group.name }}</span>
+                    <span class="group-count-badge">{{ item.files.length }} {{ $t('modsLoaded') }}</span>
+                    <span v-if="item.group.collapsed" class="group-collapsed-hint">
+                      {{ $t('collapsedGroupCount', { count: item.files.length }) }}
+                    </span>
+                  </div>
+
+                  <div class="group-header-right" @click.stop>
+                    <button
+                      class="group-action-btn edit"
+                      :title="$t('editGroup')"
+                      @click="store.openGroupModal('edit', item.group.id)"
+                    >
+                      <SvgIcon name="edit" :size="12" />
+                      <span class="btn-text">{{ $t('editGroup') }}</span>
+                    </button>
+                    <button
+                      class="group-action-btn dissolve"
+                      :title="$t('dissolveGroup')"
+                      @click="dissolveGroupConfirm(item.group)"
+                    >
+                      <SvgIcon name="trash" :size="12" />
+                      <span class="btn-text">{{ $t('dissolveGroup') }}</span>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- 分组文件内容 -->
+                <transition name="group-body-collapse">
+                  <div v-if="!item.group.collapsed" class="group-body">
+                    <div class="items-container">
+                      <VpkFileItem
+                        v-for="vpk in item.files"
+                        :key="vpk.path"
+                        :vpk="vpk"
+                        :is-selected="selectedSet.has(vpk.path)"
+                        @toggle="$emit('toggle-select', vpk.path)"
+                        @enable="$emit('enable', $event)"
+                        @disable="$emit('disable', $event)"
+                        @delete="$emit('delete', $event)"
+                      />
+                    </div>
+                  </div>
+                </transition>
+              </div>
+            </div>
+
+            <!-- 未分组文件列表 -->
+            <div v-if="ungroupedFiles.length > 0" class="ungrouped-section">
+              <div v-if="displayGroups.length > 0" class="ungrouped-header">
+                <span class="ungrouped-title">{{ $t('ungroupedMods') }}</span>
+                <span class="ungrouped-count">({{ ungroupedFiles.length }})</span>
+              </div>
+              <div class="items-container">
+                <VpkFileItem
+                  v-for="vpk in ungroupedFiles"
+                  :key="vpk.path"
+                  :vpk="vpk"
+                  :is-selected="selectedSet.has(vpk.path)"
+                  @toggle="$emit('toggle-select', vpk.path)"
+                  @enable="$emit('enable', $event)"
+                  @disable="$emit('disable', $event)"
+                  @delete="$emit('delete', $event)"
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -79,7 +164,8 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { VpkFile, useVpkManagerStore } from '@/stores/vpk-manager'
+import { VpkFile, useVpkManagerStore, getVpkKey, hexToRgb, VpkGroup } from '@/stores/vpk-manager'
+import { useI18n } from 'vue-i18n'
 import VpkFileItem from '@/components/VpkFileItem.vue'
 import SkeletonLoader from '@/components/SkeletonLoader.vue'
 import SvgIcon from '@/components/common/SvgIcon.vue'
@@ -105,7 +191,62 @@ const emit = defineEmits<{
 }>()
 
 const store = useVpkManagerStore()
+const { t: $t } = useI18n()
 const expanded = ref(true)
+
+interface GroupDisplay {
+  group: VpkGroup
+  files: VpkFile[]
+  allSelected: boolean
+  someSelected: boolean
+  selectedCount: number
+}
+
+// 收集在当前 Section 中有文件归属的所有分组（同一个组的文件强制聚集显示在一起）
+const displayGroups = computed<GroupDisplay[]>(() => {
+  const result: GroupDisplay[] = []
+  for (const grp of store.groups) {
+    const keySet = new Set(grp.file_keys || [])
+    const grpFiles = props.files.filter(f => keySet.has(getVpkKey(f.path)))
+    if (grpFiles.length > 0) {
+      const selected = grpFiles.filter(f => props.selectedSet.has(f.path))
+      result.push({
+        group: grp,
+        files: grpFiles,
+        allSelected: selected.length === grpFiles.length,
+        someSelected: selected.length > 0 && selected.length < grpFiles.length,
+        selectedCount: selected.length,
+      })
+    }
+  }
+  return result
+})
+
+// 未分组文件
+const ungroupedFiles = computed<VpkFile[]>(() => {
+  return props.files.filter(f => store.getFileGroup(f.path) === undefined)
+})
+
+function toggleGroupSelect(item: GroupDisplay) {
+  const paths = item.files.map(f => f.path)
+  if (item.allSelected) {
+    emit('deselect-all', paths)
+  } else {
+    emit('select-all', paths)
+  }
+}
+
+async function dissolveGroupConfirm(group: VpkGroup) {
+  const confirmed = await store.showConfirm(
+    $t('confirmDissolveGroup', {
+      name: group.name,
+      count: group.file_keys?.length || 0,
+    })
+  )
+  if (confirmed) {
+    store.dissolveGroup(group.id)
+  }
+}
 
 const isFiltering = computed(() => {
   return props.totalCount !== undefined && props.files.length < props.totalCount
@@ -355,5 +496,186 @@ function toggleAll() {
 
 .check-icon {
   color: #ffffff !important;
+}
+
+/* ==================== 分组卡片与折叠容器 ==================== */
+.groups-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.vpk-group-card {
+  background: rgba(var(--group-rgb), 0.04);
+  border: 1px solid rgba(var(--group-rgb), 0.35);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  transition: all var(--transition-fast);
+}
+
+.vpk-group-card:hover {
+  border-color: rgba(var(--group-rgb), 0.55);
+}
+
+.group-header {
+  padding: 10px 14px;
+  background: rgba(var(--group-rgb), 0.12);
+  border-bottom: 1px solid rgba(var(--group-rgb), 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  user-select: none;
+  transition: all var(--transition-fast);
+}
+
+.group-header:hover {
+  background: rgba(var(--group-rgb), 0.18);
+}
+
+.vpk-group-card.is-collapsed .group-header {
+  border-bottom: none;
+}
+
+.group-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.group-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--group-color);
+  transition: transform var(--transition-normal);
+}
+
+.group-chevron.is-collapsed {
+  transform: rotate(-90deg);
+}
+
+.group-checkbox {
+  margin: 0;
+}
+
+.indeterminate-bar {
+  width: 8px;
+  height: 2px;
+  background: #ffffff;
+  border-radius: 1px;
+}
+
+.group-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 6px var(--group-color);
+}
+
+.group-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.group-count-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: var(--radius-full);
+  background: rgba(var(--group-rgb), 0.2);
+  color: var(--group-color);
+  border: 1px solid rgba(var(--group-rgb), 0.35);
+  flex-shrink: 0;
+}
+
+.group-collapsed-hint {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-left: 4px;
+}
+
+.group-header-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.group-action-btn {
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.group-action-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.group-action-btn.dissolve:hover {
+  background: rgba(244, 63, 94, 0.2);
+  color: var(--accent-danger);
+  border-color: rgba(244, 63, 94, 0.4);
+}
+
+.group-body {
+  padding: 10px;
+}
+
+/* 紧凑模式下分组内部的间距 */
+.compact-mode .group-body {
+  padding: 6px;
+}
+
+/* 未分组部分标题 */
+.ungrouped-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ungrouped-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 4px 2px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.ungrouped-count {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+/* 折叠/展开过渡动画 */
+.group-body-collapse-enter-active,
+.group-body-collapse-leave-active {
+  transition: all var(--transition-normal);
+  overflow: hidden;
+}
+
+.group-body-collapse-enter-from,
+.group-body-collapse-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
 }
 </style>

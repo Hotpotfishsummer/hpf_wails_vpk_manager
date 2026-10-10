@@ -1,13 +1,29 @@
 <template>
   <div id="app" class="app-container">
     <!-- 顶部应用栏 -->
-    <AppHeader :collapsed="isScrolled" @open-settings="showSettings = true" />
+    <AppHeader
+      :collapsed="isScrolled"
+      @open-settings="showSettings = true"
+      @open-guide="showGuide = true"
+    />
 
     <!-- 全局设置弹窗 -->
     <SettingsModal v-model:show="showSettings" />
 
+    <!-- 功能使用指引弹窗 -->
+    <GuideModal v-model:show="showGuide" />
+
     <!-- 确认操作对话框 -->
     <ConfirmDialog />
+
+    <!-- 游戏客户端自动探测弹窗 -->
+    <DetectGameModal />
+
+    <!-- 模组分组操作弹窗 -->
+    <GroupActionModal />
+
+    <!-- 全局文件拖拽导入蒙层 -->
+    <DropOverlay :show="isDragOverWindow" :has-directory="!!store.currentDirectory" />
 
     <!-- 全局状态通知 -->
     <transition name="slide-fade">
@@ -61,10 +77,20 @@
               </div>
               <h2 class="empty-heading">{{ $t("noVpkFilesHeading") }}</h2>
               <p class="empty-desc">{{ $t("selectDirWithVpks") }}</p>
-              <button class="empty-browse-btn" @click="handleEmptyBrowse">
-                <SvgIcon name="folder-open" :size="16" />
-                <span>{{ $t('browseFolder') }}</span>
-              </button>
+              <div class="empty-btn-group">
+                <button class="empty-detect-btn" @click="store.detectGameDirectories(false)">
+                  <SvgIcon name="compass" :size="16" />
+                  <span>{{ $t('autoDetect') }}</span>
+                </button>
+                <button class="empty-browse-btn" @click="handleEmptyBrowse">
+                  <SvgIcon name="folder-open" :size="16" />
+                  <span>{{ $t('browseFolder') }}</span>
+                </button>
+                <button class="empty-guide-btn" @click="showGuide = true">
+                  <SvgIcon name="book-open" :size="15" />
+                  <span>{{ $t('userGuide') }}</span>
+                </button>
+              </div>
             </div>
           </section>
 
@@ -117,8 +143,13 @@ import DirectorySelector from '@/components/DirectorySelector.vue'
 import VpkFilesList from '@/components/VpkFilesList.vue'
 import SettingsModal from '@/components/SettingsModal.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import DetectGameModal from '@/components/DetectGameModal.vue'
+import GuideModal from '@/components/GuideModal.vue'
+import GroupActionModal from '@/components/GroupActionModal.vue'
 import SftpBrowser from '@/components/SftpBrowser.vue'
+import DropOverlay from '@/components/DropOverlay.vue'
 import SvgIcon from '@/components/common/SvgIcon.vue'
+import { OnFileDrop, OnFileDropOff } from '../wailsjs/runtime/runtime'
 
 const store = useVpkManagerStore()
 const { t: $t } = useI18n()
@@ -126,7 +157,55 @@ const { waitForApiReady } = usePyWebViewApi()
 
 const isScrolled = ref(false)
 const showSettings = ref(false)
+const showGuide = ref(false)
 const mainContainerRef = ref<HTMLElement | null>(null)
+
+// 窗口文件拖拽状态
+const isDragOverWindow = ref(false)
+let dragCounter = 0
+
+function onWindowDragEnter(e: DragEvent) {
+  if (e.dataTransfer && e.dataTransfer.types && e.dataTransfer.types.includes('Files')) {
+    dragCounter++
+    isDragOverWindow.value = true
+  }
+}
+
+function onWindowDragOver(e: DragEvent) {
+  if (e.dataTransfer && e.dataTransfer.types && e.dataTransfer.types.includes('Files')) {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'copy'
+  }
+}
+
+function onWindowDragLeave(e: DragEvent) {
+  if (e.dataTransfer && e.dataTransfer.types && e.dataTransfer.types.includes('Files')) {
+    dragCounter--
+    if (dragCounter <= 0) {
+      dragCounter = 0
+      isDragOverWindow.value = false
+    }
+  }
+}
+
+function onWindowDrop(e: DragEvent) {
+  dragCounter = 0
+  isDragOverWindow.value = false
+}
+
+async function handleDroppedFiles(paths: string[]) {
+  if (!store.currentDirectory) {
+    store.showNotification($t('needDirectoryFirst'), 'error')
+    return
+  }
+
+  if (store.isImporting || store.isScanning) {
+    store.showNotification($t('importing'), 'info')
+    return
+  }
+
+  await store.importFiles(paths)
+}
 
 // 分屏比例 (左侧占比百分比)
 const leftPanelPercent = ref(58)
@@ -190,10 +269,36 @@ async function handleEmptyBrowse() {
 }
 
 onMounted(async () => {
+  window.addEventListener('dragenter', onWindowDragEnter)
+  window.addEventListener('dragover', onWindowDragOver)
+  window.addEventListener('dragleave', onWindowDragLeave)
+  window.addEventListener('drop', onWindowDrop)
+
+  try {
+    OnFileDrop(async (_x: number, _y: number, paths: string[]) => {
+      isDragOverWindow.value = false
+      dragCounter = 0
+      if (!paths || paths.length === 0) return
+      await handleDroppedFiles(paths)
+    }, false)
+  } catch (err) {
+    console.warn('Wails OnFileDrop registration failed:', err)
+  }
+
   const ready = await waitForApiReady(5000)
   if (ready) {
     await store.initialize()
   }
+})
+
+onUnmounted(() => {
+  window.removeEventListener('dragenter', onWindowDragEnter)
+  window.removeEventListener('dragover', onWindowDragOver)
+  window.removeEventListener('dragleave', onWindowDragLeave)
+  window.removeEventListener('drop', onWindowDrop)
+  try {
+    OnFileDropOff()
+  } catch {}
 })
 
 const hasSelection = computed(() => {
@@ -359,7 +464,13 @@ const hasAnyFiles = computed(() => {
   line-height: 1.5;
 }
 
-.empty-browse-btn {
+.empty-btn-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.empty-detect-btn {
   height: 38px;
   padding: 0 20px;
   border-radius: var(--radius-md);
@@ -368,12 +479,61 @@ const hasAnyFiles = computed(() => {
   font-size: 13px;
   font-weight: 600;
   box-shadow: 0 4px 12px rgba(2, 132, 199, 0.4);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
   border: 1px solid rgba(56, 189, 248, 0.4);
+  transition: all var(--transition-fast);
+}
+
+.empty-detect-btn:hover {
+  filter: brightness(1.15);
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.6);
+}
+
+.empty-browse-btn {
+  height: 38px;
+  padding: 0 18px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-main);
+  border: 1px solid var(--border-medium);
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
 }
 
 .empty-browse-btn:hover {
-  background: linear-gradient(135deg, #0369a1 0%, #075985 100%);
-  box-shadow: 0 6px 18px rgba(2, 132, 199, 0.6);
+  background: rgba(255, 255, 255, 0.12);
+  border-color: var(--text-dim);
+}
+
+.empty-guide-btn {
+  height: 38px;
+  padding: 0 16px;
+  border-radius: var(--radius-md);
+  background: rgba(139, 92, 246, 0.12);
+  color: #c4b5fd;
+  border: 1px solid rgba(139, 92, 246, 0.35);
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.empty-guide-btn:hover {
+  background: rgba(139, 92, 246, 0.22);
+  border-color: rgba(139, 92, 246, 0.6);
+  color: #fff;
+  box-shadow: 0 0 12px rgba(139, 92, 246, 0.3);
 }
 
 /* 页脚 */

@@ -69,6 +69,27 @@
           <span>{{ store.isUploading ? $t('uploading') : $t('uploadToSftp') }}</span>
         </button>
 
+        <!-- 模组分组操作 -->
+        <button
+          @click="store.openGroupModal('assign')"
+          class="dock-btn btn-group"
+          :title="$t('groupManagement')"
+        >
+          <SvgIcon name="layers" :size="14" />
+          <span>{{ $t('group') }}</span>
+        </button>
+
+        <!-- 快捷移出分组 (当选中的文件中包含已分组项目时显示) -->
+        <button
+          v-if="hasGroupedSelected"
+          @click="handleRemoveFromGroup"
+          class="dock-btn btn-ungroup"
+          :title="$t('removeFromGroup')"
+        >
+          <SvgIcon name="folder-minus" :size="13" />
+          <span>{{ $t('removeFromGroup') }}</span>
+        </button>
+
         <!-- 禁用 -->
         <button
           @click="handleDisable"
@@ -276,6 +297,14 @@ async function handleDelete() {
   if (await store.showConfirm(message)) {
     await store.deleteVpks(false)
   }
+}
+
+const hasGroupedSelected = computed(() => {
+  return store.getSelectedVpkPaths().some((p) => store.getFileGroup(p) !== undefined)
+})
+
+function handleRemoveFromGroup() {
+  store.removeFilesFromGroups(store.getSelectedVpkPaths())
 }
 </script>
 
@@ -493,6 +522,32 @@ async function handleDelete() {
 .btn-upload:hover:not(:disabled) {
   background: rgba(6, 182, 212, 0.25);
   border-color: rgba(6, 182, 212, 0.55);
+}
+
+/* 分组按钮 */
+.btn-group {
+  background: rgba(14, 165, 233, 0.15);
+  color: #38bdf8;
+  border: 1px solid rgba(14, 165, 233, 0.35);
+}
+
+.btn-group:hover:not(:disabled) {
+  background: rgba(14, 165, 233, 0.28);
+  border-color: rgba(14, 165, 233, 0.6);
+  color: #ffffff;
+}
+
+/* 移出分组按钮 */
+.btn-ungroup {
+  background: rgba(245, 158, 11, 0.12);
+  color: #fcd34d;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.btn-ungroup:hover:not(:disabled) {
+  background: rgba(245, 158, 11, 0.25);
+  border-color: rgba(245, 158, 11, 0.55);
+  color: #ffffff;
 }
 
 /* 禁用按钮 */

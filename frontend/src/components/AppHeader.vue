@@ -47,6 +47,16 @@
           <span v-if="store.isSftpActive" class="status-dot online"></span>
         </button>
 
+        <!-- 使用指引按钮 -->
+        <button
+          @click="$emit('open-guide')"
+          class="header-icon-btn guide-btn"
+          :title="$t('userGuideTitle')"
+        >
+          <SvgIcon name="help-circle" :size="15" />
+          <span class="btn-label">{{ $t('userGuide') }}</span>
+        </button>
+
         <!-- 设置按钮 -->
         <button
           @click="$emit('open-settings')"
@@ -67,7 +77,10 @@ import { useI18n } from 'vue-i18n'
 import SvgIcon from '@/components/common/SvgIcon.vue'
 
 defineProps<{ collapsed: boolean }>()
-defineEmits<{ (e: 'open-settings'): void }>()
+defineEmits<{
+  (e: 'open-settings'): void
+  (e: 'open-guide'): void
+}>()
 
 const store = useVpkManagerStore()
 const { locale, t: $t } = useI18n()
@@ -256,5 +269,18 @@ function switchLanguage(lang: string) {
   width: 32px;
   padding: 0;
   justify-content: center;
+}
+
+.guide-btn {
+  background: rgba(139, 92, 246, 0.12);
+  border-color: rgba(139, 92, 246, 0.3);
+  color: #c4b5fd;
+}
+
+.guide-btn:hover {
+  background: rgba(139, 92, 246, 0.22);
+  border-color: rgba(139, 92, 246, 0.5);
+  color: #fff;
+  box-shadow: 0 0 10px rgba(139, 92, 246, 0.25);
 }
 </style>

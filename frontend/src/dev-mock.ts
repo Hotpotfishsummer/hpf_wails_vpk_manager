@@ -147,11 +147,98 @@ export function initDevMock() {
           EnableVpkFile: async () => ({ success: true }),
           ExportVpks: async () => ({ success: true, exported_count: 1 }),
           ImportCompressedVpks: async () => ({ success: true, imported_count: 1 }),
+          ImportFiles: async (paths: string[]) => ({ success: true, imported_count: paths?.length || 1 }),
           LocalizeWorkshopVpks: async () => ({ success: true, count: 1 }),
           OpenDirectory: async () => {},
           OpenExternalUrl: async () => {},
           LogFromJs: async () => {},
           RestartL4d2Server: async () => ({ success: true, duration_s: 1.2 }),
+          DetectL4D2Directories: async (_deepScan = false) => ({
+            success: true,
+            clients: [
+              {
+                path: mockState.dir,
+                exe_path: `${mockState.dir}\\left4dead2.exe`,
+                source: 'Steam 游戏库',
+                source_name: 'steam',
+                mod_count: 24,
+                has_workshop: true,
+                last_modified: 1718000000,
+              },
+              {
+                path: 'D:\\Games\\Left4Dead2_NonSteam',
+                exe_path: 'D:\\Games\\Left4Dead2_NonSteam\\left4dead2.exe',
+                source: '系统注册表/记录',
+                source_name: 'registry',
+                mod_count: 5,
+                has_workshop: false,
+                last_modified: 1715000000,
+              },
+            ],
+          }),
+          ValidateL4D2Directory: async (_dir: string) => true,
+          LaunchGame: async () => ({ success: true, message: 'Mock: 游戏已成功启动' }),
+          IsSteamClient: async (dir: string = '') => dir.toLowerCase().includes('steam'),
+          GetLaunchSettings: async () => ({
+            novid: true,
+            chinese_lang: true,
+            direct_launch: false,
+            custom_args: '',
+          }),
+          SaveLaunchSettings: async (_settings: any) => ({ success: true }),
+          GetVpkGroups: async () => {
+            try {
+              const saved = localStorage.getItem('vpk-groups-dev')
+              return saved ? JSON.parse(saved) : []
+            } catch {
+              return []
+            }
+          },
+          SaveVpkGroups: async (groups: any) => {
+            try {
+              localStorage.setItem('vpk-groups-dev', JSON.stringify(groups))
+            } catch {}
+            return { success: true }
+          },
+          GetAiSettings: async () => {
+            try {
+              const saved = localStorage.getItem('ai-settings-dev')
+              if (saved) return JSON.parse(saved)
+            } catch {}
+            return {
+              api_key: '',
+              base_url: 'https://api.openai.com/v1',
+              model: 'gpt-4o-mini',
+              temperature: 0.7,
+              max_tokens: 500,
+            }
+          },
+          SaveAiSettings: async (settings: any) => {
+            try {
+              localStorage.setItem('ai-settings-dev', JSON.stringify(settings))
+            } catch {}
+            return { success: true }
+          },
+          TestAiConnection: async (settings: any) => {
+            if (!settings?.api_key) {
+              return { success: false, error: 'Mock: API Key 不能为空' }
+            }
+            return { success: true, message: `Mock: 连接成功！模型 [${settings.model || 'gpt-4o-mini'}] 响应: OK` }
+          },
+          PredictGroupName: async (_files: any[]) => {
+            return {
+              success: true,
+              predicted_name: '生还者模组套装',
+              reason: 'Mock 智能预测',
+              source: 'ai',
+            }
+          },
+          AiChat: async () => {
+            return {
+              success: true,
+              content: 'Mock: AI 响应成功',
+            }
+          },
         },
       },
     }
