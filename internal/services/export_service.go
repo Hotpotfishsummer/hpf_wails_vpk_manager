@@ -23,11 +23,16 @@ var illegalArchiveChars = regexp.MustCompile(`[<>:"/\\|?*\x00-\x1f]`)
 type ProgressCallback func(stage string, done int, total int)
 
 type ExportService struct {
-	metaService *VpkMetadataService
+	metaService  *VpkMetadataService
+	notesService *NotesService
 }
 
-func NewExportService(meta *VpkMetadataService) *ExportService {
-	return &ExportService{metaService: meta}
+func NewExportService(meta *VpkMetadataService, notes ...*NotesService) *ExportService {
+	var n *NotesService
+	if len(notes) > 0 {
+		n = notes[0]
+	}
+	return &ExportService{metaService: meta, notesService: n}
 }
 
 func (s *ExportService) GenerateArchiveName(filePaths []string, titles []string) string {
@@ -136,7 +141,11 @@ func (s *ExportService) ExportVpks(
 			if i < len(titles) {
 				title = titles[i]
 			}
-			baseName = naming.BuildExportBaseName(title, filename, stem)
+			var note string
+			if s.notesService != nil {
+				note = s.notesService.GetNote(srcPath)
+			}
+			baseName = naming.BuildExportBaseNameWithNote(title, filename, stem, note)
 		}
 
 		// Copy VPK file

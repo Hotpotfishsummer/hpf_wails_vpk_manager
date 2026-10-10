@@ -1,94 +1,101 @@
 <template>
   <div :class="['status-banner', `status-${store.notification.type}`]">
     <div class="status-content">
-      <span class="status-icon">
-        {{ store.notification.type === 'success' ? '✅' : (store.notification.type === 'error' ? '⚠️' : 'ℹ️') }}
-      </span>
+      <div class="status-icon-box">
+        <SvgIcon
+          :name="store.notification.type === 'success' ? 'check-circle' : (store.notification.type === 'error' ? 'alert-triangle' : 'info')"
+          :size="16"
+        />
+      </div>
       <span class="status-text">{{ store.notification.message }}</span>
-      <button @click="store.notification.message = ''" class="status-close">×</button>
+      <button @click="store.notification.message = ''" class="status-close-btn" title="关闭通知">
+        <SvgIcon name="x" :size="14" />
+      </button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { useVpkManagerStore } from '@/stores/vpk-manager'
+import SvgIcon from '@/components/common/SvgIcon.vue'
 
 const store = useVpkManagerStore()
 </script>
 
 <style scoped>
-/* Status banner */
 .status-banner {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  animation: slideDown 0.3s ease;
-  z-index: 1000;
+  border-bottom: 1px solid var(--border-subtle);
+  animation: slide-down 0.2s ease;
+  z-index: 90;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 .status-success {
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+  background: rgba(16, 185, 129, 0.15);
+  border-color: rgba(16, 185, 129, 0.3);
+  color: var(--accent-success);
 }
 
 .status-error {
-  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2);
+  background: rgba(244, 63, 94, 0.15);
+  border-color: rgba(244, 63, 94, 0.3);
+  color: var(--accent-danger);
 }
 
 .status-info {
-  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
+  background: rgba(56, 189, 248, 0.15);
+  border-color: rgba(56, 189, 248, 0.3);
+  color: var(--accent-primary);
 }
 
 .status-content {
-  max-width: 1200px;
+  max-width: 1360px;
   margin: 0 auto;
-  padding: 14px 24px;
+  padding: 10px 24px;
   display: flex;
   align-items: center;
-  gap: 14px;
-  color: white;
+  gap: 12px;
 }
 
-.status-icon {
-  font-size: 20px;
+.status-icon-box {
+  display: flex;
+  align-items: center;
   flex-shrink: 0;
 }
 
 .status-text {
   flex: 1;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
+  color: #fff;
+  line-height: 1.4;
 }
 
-.status-close {
-  background: rgba(255, 255, 255, 0.2);
-  border: none;
-  color: white;
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 20px;
+.status-close-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s ease;
-  flex-shrink: 0;
+  transition: all var(--transition-fast);
 }
 
-.status-close:hover {
-  background: rgba(255, 255, 255, 0.3);
-  transform: scale(1.05);
+.status-close-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
 }
 
-@keyframes slideDown {
+@keyframes slide-down {
   from {
-    transform: translateY(-100%);
     opacity: 0;
+    transform: translateY(-8px);
   }
   to {
-    transform: translateY(0);
     opacity: 1;
+    transform: translateY(0);
   }
 }
 </style>

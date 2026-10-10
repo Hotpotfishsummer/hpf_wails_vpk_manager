@@ -11,11 +11,16 @@ import (
 )
 
 type LocalizeService struct {
-	metaService *VpkMetadataService
+	metaService  *VpkMetadataService
+	notesService *NotesService
 }
 
-func NewLocalizeService(meta *VpkMetadataService) *LocalizeService {
-	return &LocalizeService{metaService: meta}
+func NewLocalizeService(meta *VpkMetadataService, notes ...*NotesService) *LocalizeService {
+	var n *NotesService
+	if len(notes) > 0 {
+		n = notes[0]
+	}
+	return &LocalizeService{metaService: meta, notesService: n}
 }
 
 func (s *LocalizeService) Localize(filePaths []string, l4d2Dir string, betterNaming bool) models.LocalizeResult {
@@ -100,7 +105,11 @@ func (s *LocalizeService) resolveBaseName(srcPath string, betterNaming bool) str
 	if title != nil {
 		titleStr = *title
 	}
-	return naming.BuildExportBaseName(titleStr, name, fallback)
+	var note string
+	if s.notesService != nil {
+		note = s.notesService.GetNote(srcPath)
+	}
+	return naming.BuildExportBaseNameWithNote(titleStr, name, fallback, note)
 }
 
 func (s *LocalizeService) moveToTrash(filePath, trashDir string) {

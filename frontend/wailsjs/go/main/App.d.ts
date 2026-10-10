@@ -18,11 +18,15 @@ export function EnableVpkFile(arg1:string):Promise<models.ApiResult>;
 
 export function ExportVpks(arg1:Array<string>,arg2:string,arg3:boolean,arg4:boolean):Promise<models.ExportResult>;
 
+export function GetAllVpkNotes():Promise<Record<string, string>>;
+
 export function GetDownloadsDirectory():Promise<string>;
 
 export function GetLastDirectory():Promise<string>;
 
 export function GetSftpSettings():Promise<models.SftpSettings>;
+
+export function GetVpkNote(arg1:string):Promise<string>;
 
 export function ImportCompressedVpks():Promise<models.ImportResult>;
 
@@ -45,5 +49,7 @@ export function RestartL4d2Server():Promise<models.RestartResult>;
 export function SaveSftpSettings(arg1:models.SftpSettings):Promise<models.ApiResult>;
 
 export function ScanVpkFiles(arg1:string):Promise<models.ScanResult>;
+
+export function SetVpkNote(arg1:string,arg2:string):Promise<models.ApiResult>;
 
 export function UploadLocalVpks(arg1:Array<string>,arg2:boolean):Promise<models.UploadResult>;

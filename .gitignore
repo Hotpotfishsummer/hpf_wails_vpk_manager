@@ -15,3 +15,6 @@ Thumbs.db
 
 # Test cache
 *.tmp
+
+# Logs
+*.log

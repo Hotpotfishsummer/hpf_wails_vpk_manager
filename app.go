@@ -21,6 +21,7 @@ type App struct {
 	ctx              context.Context
 	storageService   *services.StorageService
 	configService    *services.ConfigService
+	notesService     *services.NotesService
 	metaService      *services.VpkMetadataService
 	scanService      *services.ScanService
 	exportService    *services.ExportService
@@ -36,19 +37,22 @@ type App struct {
 func NewApp() *App {
 	storage := services.NewStorageService()
 	config := services.NewConfigService()
+	notes := services.NewNotesService()
 	meta := services.NewVpkMetadataService()
+	meta.SetNotesService(notes)
 	scan := services.NewScanService(meta)
-	export := services.NewExportService(meta)
+	export := services.NewExportService(meta, notes)
 	importSvc := services.NewImportService()
-	localize := services.NewLocalizeService(meta)
+	localize := services.NewLocalizeService(meta, notes)
 	sftp := services.NewSftpService()
-	upload := services.NewUploadService(meta, sftp)
+	upload := services.NewUploadService(meta, sftp, notes)
 	download := services.NewDownloadService(sftp)
 	restarter := services.NewRestarterService()
 
 	return &App{
 		storageService:   storage,
 		configService:    config,
+		notesService:     notes,
 		metaService:      meta,
 		scanService:      scan,
 		exportService:    export,
@@ -418,4 +422,25 @@ func (a *App) OpenExternalUrl(url string) {
 // RestartL4d2Server requests restart of remote L4D2 container service
 func (a *App) RestartL4d2Server() models.RestartResult {
 	return a.restarterService.RestartServer()
+}
+
+// SetVpkNote sets a custom note for a local or workshop VPK file
+func (a *App) SetVpkNote(filePath, note string) models.ApiResult {
+	if filePath == "" {
+		return models.ApiResult{Success: false, Error: "文件路径不能为空"}
+	}
+	if err := a.notesService.SetNote(filePath, note); err != nil {
+		return models.ApiResult{Success: false, Error: err.Error()}
+	}
+	return models.ApiResult{Success: true, Message: "备注保存成功"}
+}
+
+// GetVpkNote retrieves the custom note for a VPK file
+func (a *App) GetVpkNote(filePath string) string {
+	return a.notesService.GetNote(filePath)
+}
+
+// GetAllVpkNotes retrieves all notes mapped by key
+func (a *App) GetAllVpkNotes() map[string]string {
+	return a.notesService.GetAllNotes()
 }

@@ -15,14 +15,22 @@ import (
 )
 
 type VpkCachedMetadata struct {
-	AddonTitle  *string `json:"addontitle,omitempty"`
-	SourceMtime float64 `json:"source_mtime,omitempty"`
-	SourceSize  int64   `json:"source_size,omitempty"`
+	AddonTitle  *string           `json:"addontitle,omitempty"`
+	SourceMtime float64           `json:"source_mtime,omitempty"`
+	SourceSize  int64             `json:"source_size,omitempty"`
+	Maps        *[]models.MapInfo `json:"maps,omitempty"`
 }
 
 type VpkMetadataService struct {
-	mu        sync.RWMutex
-	configDir string
+	mu           sync.RWMutex
+	configDir    string
+	notesService *NotesService
+}
+
+func (m *VpkMetadataService) SetNotesService(notes *NotesService) {
+	m.mu.Lock()
+	m.notesService = notes
+	m.mu.Unlock()
 }
 
 func NewVpkMetadataService(configDir ...string) *VpkMetadataService {
@@ -123,17 +131,14 @@ func (m *VpkMetadataService) GetAddonTitle(vpkPath string) *string {
 		return cached.AddonTitle
 	}
 
-	// Extract title from VPK
-	titleStr, err := vpk.ExtractAddonTitle(vpkPath)
-	var title *string
-	if err == nil && titleStr != "" {
-		title = &titleStr
-	}
+	// Extract title and maps from VPK
+	title, maps, _ := vpk.ExtractMetadata(vpkPath)
 
 	newMeta := &VpkCachedMetadata{
 		AddonTitle:  title,
 		SourceMtime: float64(info.ModTime().UnixNano()) / 1e9,
 		SourceSize:  info.Size(),
+		Maps:        &maps,
 	}
 	m.SaveMetadata(vpkPath, newMeta)
 	return title
@@ -149,11 +154,41 @@ func (m *VpkMetadataService) GetVpkMetadata(vpkPath string) (*models.VpkFile, er
 	lowerName := strings.ToLower(filename)
 	isDisabled := strings.HasSuffix(lowerName, ".disabled")
 
-	addonTitle := m.GetAddonTitle(vpkPath)
+	var addonTitle *string
+	var maps []models.MapInfo
+
+	cached := m.LoadMetadata(vpkPath)
+	if cached != nil && m.isCacheFresh(cached, info) && cached.Maps != nil {
+		addonTitle = cached.AddonTitle
+		maps = *cached.Maps
+	} else {
+		title, extractedMaps, _ := vpk.ExtractMetadata(vpkPath)
+		addonTitle = title
+		maps = extractedMaps
+
+		newMeta := &VpkCachedMetadata{
+			AddonTitle:  addonTitle,
+			SourceMtime: float64(info.ModTime().UnixNano()) / 1e9,
+			SourceSize:  info.Size(),
+			Maps:        &maps,
+		}
+		m.SaveMetadata(vpkPath, newMeta)
+	}
 
 	displayName := filename
 	if addonTitle != nil && *addonTitle != "" {
 		displayName = *addonTitle
+	}
+
+	var note string
+	m.mu.RLock()
+	if m.notesService != nil {
+		note = m.notesService.GetNote(vpkPath)
+	}
+	m.mu.RUnlock()
+
+	if note != "" {
+		displayName = displayName + " [" + note + "]"
 	}
 
 	// Look for thumbnail image
@@ -185,5 +220,7 @@ func (m *VpkMetadataService) GetVpkMetadata(vpkPath string) (*models.VpkFile, er
 		ThumbnailPath: thumbnailURL,
 		AddonTitle:    addonTitle,
 		DisplayName:   displayName,
+		Note:          note,
+		Maps:          maps,
 	}, nil
 }

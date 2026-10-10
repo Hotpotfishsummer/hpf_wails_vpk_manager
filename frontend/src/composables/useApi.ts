@@ -14,11 +14,15 @@ import type {
 } from '@/types/api'
 
 // 监听 Wails 后端推送的导出进度事件
-EventsOn('export-progress', (data: any) => {
-  if (typeof (window as any).__onExportProgress === 'function') {
-    ;(window as any).__onExportProgress(data)
-  }
-})
+try {
+  EventsOn('export-progress', (data: any) => {
+    if (typeof (window as any).__onExportProgress === 'function') {
+      ;(window as any).__onExportProgress(data)
+    }
+  })
+} catch {
+  // 忽略非 Wails 环境下的异常
+}
 
 // Wails API 适配器（保持与原 PyWebViewApi 完全一致的签名和返回值）
 const wailsAdapter = {
@@ -42,7 +46,7 @@ const wailsAdapter = {
   enable_vpk_file: (file_path: string) => AppApi.EnableVpkFile(file_path) as Promise<ApiResult>,
   reset_app_data: () => AppApi.ResetAppData(),
   log_from_js: (level: string, message: string) => AppApi.LogFromJs(level, message),
-  get_sftp_settings: () => AppApi.GetSftpSettings() as Promise<Record<string, string>>,
+  get_sftp_settings: () => AppApi.GetSftpSettings() as unknown as Promise<Record<string, string>>,
   save_sftp_settings: (settings: Record<string, string>) =>
     AppApi.SaveSftpSettings(settings as any) as Promise<ApiResult>,
   list_remote_vpks: () => AppApi.ListRemoteVpks() as Promise<RemoteListResult>,
@@ -57,6 +61,9 @@ const wailsAdapter = {
     AppApi.UploadLocalVpks(local_file_paths, better_naming) as Promise<UploadResult>,
   open_external_url: (url: string) => AppApi.OpenExternalUrl(url),
   restart_l4d2_server: () => AppApi.RestartL4d2Server() as Promise<ApiResult & { duration_s?: number }>,
+  set_vpk_note: (file_path: string, note: string) => AppApi.SetVpkNote(file_path, note) as Promise<ApiResult>,
+  get_vpk_note: (file_path: string) => AppApi.GetVpkNote(file_path) as Promise<string>,
+  get_all_vpk_notes: () => AppApi.GetAllVpkNotes() as Promise<Record<string, string>>,
 }
 
 export type PyWebViewApi = typeof wailsAdapter
@@ -99,7 +106,7 @@ export function usePyWebViewApi() {
     return true
   }
 
-  const waitForApiReady = async (): Promise<boolean> => {
+  const waitForApiReady = async (_timeoutMs: number = 5000): Promise<boolean> => {
     isApiReady.value = true
     return true
   }

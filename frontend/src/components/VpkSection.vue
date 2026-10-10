@@ -1,12 +1,31 @@
 <template>
   <section class="vpk-section">
     <div class="section-header" @click="toggleExpanded">
-      <h2 class="section-title">
-        {{ title }} ({{ isFiltering ? `${files.length}/${totalCount}` : files.length }})
-      </h2>
-      <span class="section-toggle" :class="{ rotated: expanded }">▶</span>
+      <div class="header-titles">
+        <div class="title-with-badge">
+          <h2 class="section-title">{{ title }}</h2>
+          <span class="count-pill">
+            {{ isFiltering ? `${files.length} / ${totalCount}` : files.length }}
+          </span>
+        </div>
+        <p class="section-subtitle">{{ subtitle }}</p>
+      </div>
+
+      <div class="header-actions">
+        <button
+          class="folder-quick-btn"
+          @click.stop="$emit('open-folder')"
+          :title="$t('openInFileManager')"
+        >
+          <SvgIcon name="folder-open" :size="15" />
+          <span class="folder-btn-text">{{ $t('openFolder', '打开目录') }}</span>
+        </button>
+
+        <span class="section-chevron" :class="{ 'is-expanded': expanded }">
+          <SvgIcon name="chevron-down" :size="18" />
+        </span>
+      </div>
     </div>
-    <p class="section-subtitle">{{ subtitle }}</p>
 
     <transition name="expand">
       <div v-if="expanded" class="section-content-wrapper">
@@ -14,46 +33,43 @@
           <div v-if="files.length === 0 && isScanning" class="file-list">
             <SkeletonLoader :item-count="3" />
           </div>
-          <div v-else-if="isFiltering && files.length === 0" class="empty-message">
-            {{ $t('noSearchResults') }}
+          <div v-else-if="files.length === 0" class="empty-message-box">
+            <SvgIcon name="info" :size="20" class="empty-info-icon" />
+            <p>{{ isFiltering ? $t('noSearchResults') : emptyText }}</p>
           </div>
-          <div v-else-if="files.length === 0" class="empty-message">
-            {{ emptyText }}
-          </div>
-          <div v-else-if="isFiltering && files.length === 0" class="empty-message">
-            {{ $t('noSearchResults') }}
-          </div>
-          <div v-else class="file-list">
-            <div class="list-actions">
-              <label class="checkbox-label">
+          <div v-else class="file-list" :class="{ 'compact-mode': store.viewMode === 'compact' }">
+            <!-- 全选与当前区块统计 -->
+            <div class="section-toolbar">
+              <label class="custom-checkbox" @click.stop>
                 <input
                   type="checkbox"
                   :checked="allSelected"
                   @change="toggleAll"
                 />
-                <span>{{ allSelected ? $t('deselectAll') : $t('selectAll') }}</span>
+                <span class="checkbox-mark" :class="{ 'is-checked': allSelected }">
+                  <SvgIcon v-if="allSelected" name="check" :size="12" stroke-width="3.2" class="check-icon" />
+                </span>
+                <span class="checkbox-label-text">{{ allSelected ? $t('deselectAll') : $t('selectAll') }}</span>
               </label>
-              <span v-if="selectedCount > 0" class="selection-stats">
+
+              <span v-if="selectedCount > 0" class="selection-pill">
                 {{ $t('selectedFilesWithSize', { count: selectedCount, size: selectedTotalSize }) }}
               </span>
-              <button
-                class="action-icon-btn"
-                @click.stop="$emit('open-folder')"
-                :title="$t('openInFileManager')"
-              >
-                <span class="icon">📂</span>
-              </button>
             </div>
-            <VpkFileItem
-              v-for="vpk in files"
-              :key="vpk.path"
-              :vpk="vpk"
-              :is-selected="selectedSet.has(vpk.path)"
-              @toggle="$emit('toggle-select', vpk.path)"
-              @enable="$emit('enable', $event)"
-              @disable="$emit('disable', $event)"
-              @delete="$emit('delete', $event)"
-            />
+
+            <!-- 文件列表 -->
+            <div class="items-container">
+              <VpkFileItem
+                v-for="vpk in files"
+                :key="vpk.path"
+                :vpk="vpk"
+                :is-selected="selectedSet.has(vpk.path)"
+                @toggle="$emit('toggle-select', vpk.path)"
+                @enable="$emit('enable', $event)"
+                @disable="$emit('disable', $event)"
+                @delete="$emit('delete', $event)"
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -62,10 +78,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
-import type { VpkFile } from '@/stores/vpk-manager'
+import { ref, computed } from 'vue'
+import { VpkFile, useVpkManagerStore } from '@/stores/vpk-manager'
 import VpkFileItem from '@/components/VpkFileItem.vue'
 import SkeletonLoader from '@/components/SkeletonLoader.vue'
+import SvgIcon from '@/components/common/SvgIcon.vue'
 
 const props = defineProps<{
   title: string
@@ -87,9 +104,8 @@ const emit = defineEmits<{
   (e: 'delete', path: string): void
 }>()
 
-const SECTION_STATE_KEY = 'vpk-section-expanded'
-const SECTION_ID = 'vpk-section'
-const expanded = ref(loadExpanded())
+const store = useVpkManagerStore()
+const expanded = ref(true)
 
 const isFiltering = computed(() => {
   return props.totalCount !== undefined && props.files.length < props.totalCount
@@ -104,226 +120,240 @@ const selectedCount = computed(() => {
 })
 
 const selectedTotalSize = computed(() => {
-  const total = props.files
+  const bytes = props.files
     .filter((vpk) => props.selectedSet.has(vpk.path))
-    .reduce((sum, vpk) => sum + vpk.size, 0)
-  return formatBytes(total)
+    .reduce((acc, curr) => acc + curr.size, 0)
+  const mb = bytes / (1024 * 1024)
+  if (mb < 1) {
+    const kb = bytes / 1024
+    return kb < 1 ? `${bytes} B` : `${kb.toFixed(2)} KB`
+  }
+  return `${mb.toFixed(2)} MB`
 })
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  const kb = bytes / 1024
-  if (kb < 1) return `${bytes} B`
-  if (kb < 1024) return `${kb.toFixed(2)} KB`
-  const mb = kb / 1024
-  if (mb < 1024) return `${mb.toFixed(2)} MB`
-  const gb = mb / 1024
-  return `${gb.toFixed(2)} GB`
-}
 
 function toggleExpanded() {
   expanded.value = !expanded.value
 }
 
-function loadExpanded(): boolean {
-  try {
-    const raw = localStorage.getItem(`${SECTION_STATE_KEY}:${SECTION_ID}`)
-    if (raw !== null) return raw !== 'false'
-  } catch {
-    // 忽略 localStorage 不可用(隐私模式/安全策略)
-  }
-  return true
-}
-
-function persistExpanded(value: boolean) {
-  try {
-    localStorage.setItem(`${SECTION_STATE_KEY}:${SECTION_ID}`, String(value))
-  } catch {
-    // 忽略不可写 localStorage
-  }
-}
-
-
-watch(expanded, (value) => {
-  persistExpanded(value)
-})
-
 function toggleAll() {
+  const currentPaths = props.files.map((v) => v.path)
   if (allSelected.value) {
-    emit('deselect-all', props.files.map((v) => v.path))
+    emit('deselect-all', currentPaths)
   } else {
-    emit('select-all', props.files.map((v) => v.path))
+    emit('select-all', currentPaths)
   }
 }
 </script>
 
 <style scoped>
 .vpk-section {
-  background: rgba(30, 41, 59, 0.5);
-  border-radius: 12px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(148, 163, 184, 0.15);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
   overflow: hidden;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  backdrop-filter: blur(20px);
+  box-shadow: var(--shadow-sm);
+  transition: border-color var(--transition-fast);
 }
 
 .vpk-section:hover {
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  border-color: var(--border-medium);
 }
 
 .section-header {
+  padding: 14px 18px;
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 18px 20px;
-  background: rgba(15, 23, 42, 0.6);
+  justify-content: space-between;
   cursor: pointer;
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid var(--border-subtle);
   user-select: none;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.15);
-  transition: background-color 0.2s ease;
+  transition: background var(--transition-fast);
 }
 
 .section-header:hover {
-  background: rgba(15, 23, 42, 0.8);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.header-titles {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.title-with-badge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .section-title {
-  margin: 0;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
-  color: #e2e8f0;
-  letter-spacing: -0.3px;
+  color: #fff;
+  letter-spacing: -0.01em;
 }
 
-.section-toggle {
-  font-size: 13px;
-  color: #94a3b8;
+.count-pill {
+  font-size: 11px;
   font-weight: 600;
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.section-toggle.rotated {
-  transform: rotate(90deg);
-}
-
-.section-header:hover .section-toggle {
-  color: #cbd5e1;
+  padding: 1px 8px;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-muted);
+  border: 1px solid var(--border-subtle);
 }
 
 .section-subtitle {
-  margin: 0;
-  padding: 0 20px;
-  padding-top: 10px;
-  font-size: 13px;
-  color: #94a3b8;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.folder-quick-btn {
+  appearance: none;
+  -webkit-appearance: none;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: var(--radius-sm);
+  background: #182337;
+  border: 1px solid var(--border-medium);
+  color: #cbd5e1;
+  font-size: 12px;
   font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
 }
 
-/* Expansion Animation */
-.expand-enter-active,
-.expand-leave-active {
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  max-height: 2000px; /* Large enough to fit content */
-  opacity: 1;
-  overflow: hidden;
+.folder-quick-btn:hover {
+  background: #22314a;
+  color: #fff;
+  border-color: var(--border-strong);
 }
 
-.expand-enter-from,
-.expand-leave-to {
-  max-height: 0;
-  opacity: 0;
-  padding-top: 0;
-  padding-bottom: 0;
-  transform: translateY(-10px);
+.section-chevron {
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  transition: transform var(--transition-normal);
 }
 
-.section-content-wrapper {
-  overflow: hidden;
+.section-chevron.is-expanded {
+  transform: rotate(0deg);
+}
+
+.section-chevron:not(.is-expanded) {
+  transform: rotate(-90deg);
 }
 
 .section-content {
-  padding: 16px 20px;
+  padding: 14px 18px;
 }
 
-.empty-message {
-  padding: 28px 20px;
+.empty-message-box {
+  padding: 24px;
   text-align: center;
-  color: #94a3b8;
-  font-style: italic;
-  font-weight: 500;
-}
-
-.file-list {
+  color: var(--text-dim);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
 }
 
-.list-actions {
+.empty-info-icon {
+  color: var(--text-dim);
+  opacity: 0.6;
+}
+
+.section-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-bottom: 14px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.15);
-  margin-bottom: 14px;
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
-.action-icon-btn {
-  background: rgba(148, 163, 184, 0.1);
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  color: #e2e8f0;
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
+.checkbox-label-text {
+  font-size: 12px;
+  font-weight: 600;
+  color: #cbd5e1;
+  margin-left: 8px;
+}
+
+.selection-pill {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background: rgba(56, 189, 248, 0.15);
+  color: var(--accent-primary);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+}
+
+.items-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* 紧凑模式下的间距更小 */
+.compact-mode .items-container {
+  gap: 4px;
+}
+
+/* 自定义复选框 */
+.custom-checkbox {
+  position: relative;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+}
+
+.custom-checkbox input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.checkbox-mark {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: 1.5px solid #475569;
+  background: #141c2c;
   display: flex;
   align-items: center;
   justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
 }
 
-.action-icon-btn:hover {
-  background: rgba(148, 163, 184, 0.2);
-  border-color: rgba(148, 163, 184, 0.4);
-  transform: translateY(-1px);
+.custom-checkbox:hover .checkbox-mark {
+  border-color: #38bdf8;
+  background: #192336;
 }
 
-.action-icon-btn .icon {
-  font-size: 16px;
+.custom-checkbox input:checked + .checkbox-mark,
+.checkbox-mark.is-checked {
+  background: #0284c7 !important;
+  border-color: #38bdf8 !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.45);
 }
 
-.checkbox-label {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  cursor: pointer;
-  font-size: 14px;
-  color: #e2e8f0;
-  font-weight: 600;
-  padding: 8px 0;
-  transition: color 0.2s ease;
-}
-
-.checkbox-label input[type='checkbox'] {
-  cursor: pointer;
-  width: 18px;
-  height: 18px;
-  accent-color: #3b82f6;
-}
-
-.checkbox-label:hover {
-  color: #3b82f6;
-}
-
-.selection-stats {
-  font-size: 13px;
-  font-weight: 600;
-  color: #60a5fa;
-  background: rgba(59, 130, 246, 0.12);
-  border: 1px solid rgba(59, 130, 246, 0.3);
-  border-radius: 999px;
-  padding: 4px 12px;
-  white-space: nowrap;
+.check-icon {
+  color: #ffffff !important;
 }
 </style>

@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -13,6 +16,8 @@ import (
 	"golang.org/x/text/encoding/simplifiedchinese"
 	"golang.org/x/text/encoding/traditionalchinese"
 	"golang.org/x/text/encoding/unicode"
+
+	"hpf_wails_vpk_manager/internal/models"
 )
 
 const (
@@ -297,4 +302,385 @@ func ExtractAddonTitle(vpkPath string) (string, error) {
 		return "", fmt.Errorf("addontitle key not found in addoninfo.txt")
 	}
 	return title, nil
+}
+
+// KVNode represents a KeyValues tree node
+type KVNode struct {
+	Key      string
+	Value    string
+	Children []*KVNode
+}
+
+func tokenizeKV(text string) []string {
+	var tokens []string
+	n := len(text)
+	i := 0
+	for i < n {
+		c := text[i]
+
+		// Skip whitespace
+		if c == ' ' || c == '\t' || c == '\r' || c == '\n' {
+			i++
+			continue
+		}
+
+		// Skip comments //
+		if c == '/' && i+1 < n && text[i+1] == '/' {
+			for i < n && text[i] != '\n' {
+				i++
+			}
+			continue
+		}
+
+		// Braces
+		if c == '{' || c == '}' {
+			tokens = append(tokens, string(c))
+			i++
+			continue
+		}
+
+		// Quoted string
+		if c == '"' {
+			i++
+			var buf []byte
+			for i < n && text[i] != '"' {
+				if text[i] == '\\' && i+1 < n {
+					i++
+					buf = append(buf, text[i])
+				} else {
+					buf = append(buf, text[i])
+				}
+				i++
+			}
+			if i < n && text[i] == '"' {
+				i++
+			}
+			tokens = append(tokens, string(buf))
+			continue
+		}
+
+		// Unquoted word
+		start := i
+		for i < n && text[i] != ' ' && text[i] != '\t' && text[i] != '\r' && text[i] != '\n' && text[i] != '{' && text[i] != '}' && text[i] != '"' {
+			if text[i] == '/' && i+1 < n && text[i+1] == '/' {
+				break
+			}
+			i++
+		}
+		if i > start {
+			tokens = append(tokens, text[start:i])
+		}
+	}
+	return tokens
+}
+
+func parseKVTokens(tokens []string) []*KVNode {
+	idx := 0
+	var parseBlock func() []*KVNode
+	parseBlock = func() []*KVNode {
+		var list []*KVNode
+		for idx < len(tokens) {
+			token := tokens[idx]
+			if token == "}" {
+				idx++
+				break
+			}
+			if token == "{" {
+				idx++
+				continue
+			}
+
+			key := token
+			idx++
+			if idx >= len(tokens) {
+				list = append(list, &KVNode{Key: key})
+				break
+			}
+
+			nextToken := tokens[idx]
+			if nextToken == "{" {
+				idx++
+				children := parseBlock()
+				list = append(list, &KVNode{Key: key, Children: children})
+			} else if nextToken == "}" {
+				list = append(list, &KVNode{Key: key})
+				idx++
+				break
+			} else {
+				list = append(list, &KVNode{Key: key, Value: nextToken})
+				idx++
+			}
+		}
+		return list
+	}
+	return parseBlock()
+}
+
+func findKVNode(nodes []*KVNode, key string) *KVNode {
+	for _, n := range nodes {
+		if strings.EqualFold(n.Key, key) {
+			return n
+		}
+	}
+	return nil
+}
+
+func cleanChapterToken(token string, tokens map[string]string) string {
+	if token == "" {
+		return ""
+	}
+	// Try direct lookup
+	if translated, ok := tokens[strings.ToLower(token)]; ok && translated != "" {
+		return translated
+	}
+	trimmed := strings.TrimPrefix(token, "#")
+	if translated, ok := tokens[strings.ToLower(trimmed)]; ok && translated != "" {
+		return translated
+	}
+	// Fallback: cleanup valve prefixes
+	if strings.HasPrefix(token, "#") {
+		clean := strings.TrimPrefix(token, "#L4D360UI_Chapter_")
+		clean = strings.TrimPrefix(clean, "#L4D360UI_")
+		clean = strings.TrimPrefix(clean, "#")
+		return clean
+	}
+	return token
+}
+
+func parseMissionMaps(content string, tokens map[string]string) []models.MapInfo {
+	tokensList := tokenizeKV(content)
+	if len(tokensList) == 0 {
+		return nil
+	}
+
+	rootNodes := parseKVTokens(tokensList)
+	// Find mission node (usually the root object or root list)
+	var missionNode *KVNode
+	for _, node := range rootNodes {
+		if strings.EqualFold(node.Key, "mission") && len(node.Children) > 0 {
+			missionNode = node
+			break
+		}
+	}
+	if missionNode == nil && len(rootNodes) > 0 {
+		missionNode = rootNodes[0]
+	}
+	if missionNode == nil {
+		return nil
+	}
+
+	modesNode := findKVNode(missionNode.Children, "modes")
+	if modesNode == nil {
+		return nil
+	}
+
+	// Priority: coop > campaign > versus > survival > scavenge > first available
+	var targetMode *KVNode
+	for _, modeName := range []string{"coop", "campaign", "versus", "survival", "scavenge"} {
+		if m := findKVNode(modesNode.Children, modeName); m != nil && len(m.Children) > 0 {
+			targetMode = m
+			break
+		}
+	}
+	if targetMode == nil && len(modesNode.Children) > 0 {
+		targetMode = modesNode.Children[0]
+	}
+	if targetMode == nil {
+		return nil
+	}
+
+	var maps []models.MapInfo
+	for _, chapter := range targetMode.Children {
+		var mapName, displayName string
+		if len(chapter.Children) > 0 {
+			for _, prop := range chapter.Children {
+				if strings.EqualFold(prop.Key, "map") {
+					mapName = prop.Value
+				} else if strings.EqualFold(prop.Key, "displayname") {
+					displayName = prop.Value
+				}
+			}
+		} else if strings.EqualFold(chapter.Key, "map") {
+			mapName = chapter.Value
+		}
+
+		mapName = strings.TrimSpace(mapName)
+		mapName = strings.TrimSuffix(mapName, ".bsp")
+		if mapName != "" {
+			cleanedDisplay := cleanChapterToken(strings.TrimSpace(displayName), tokens)
+			maps = append(maps, models.MapInfo{
+				Name:        mapName,
+				DisplayName: cleanedDisplay,
+			})
+		}
+	}
+
+	return maps
+}
+
+func naturalCompare(a, b string) bool {
+	re := regexp.MustCompile(`(\d+|\D+)`)
+	aParts := re.FindAllString(strings.ToLower(a), -1)
+	bParts := re.FindAllString(strings.ToLower(b), -1)
+
+	for i := 0; i < len(aParts) && i < len(bParts); i++ {
+		aPart := aParts[i]
+		bPart := bParts[i]
+
+		aNum, aErr := strconv.Atoi(aPart)
+		bNum, bErr := strconv.Atoi(bPart)
+
+		if aErr == nil && bErr == nil {
+			if aNum != bNum {
+				return aNum < bNum
+			}
+		} else {
+			if aPart != bPart {
+				return aPart < bPart
+			}
+		}
+	}
+	return len(aParts) < len(bParts)
+}
+
+func isBackgroundMap(name string) bool {
+	lower := strings.ToLower(name)
+	return strings.HasPrefix(lower, "background") ||
+		strings.HasPrefix(lower, "l4d_background") ||
+		strings.HasPrefix(lower, "l4d2_background") ||
+		strings.Contains(lower, "_background")
+}
+
+// ExtractMaps parses all map names and chapter information from the VPK
+func (v *File) ExtractMaps() []models.MapInfo {
+	// 1. Collect all BSP files in VPK
+	var bspMapNames []string
+	seenBsp := make(map[string]bool)
+	for _, entry := range v.entries {
+		if strings.EqualFold(entry.Extension, "bsp") {
+			name := strings.TrimSpace(entry.Filename)
+			if name == "" {
+				continue
+			}
+			lower := strings.ToLower(name)
+			if !seenBsp[lower] {
+				seenBsp[lower] = true
+				bspMapNames = append(bspMapNames, name)
+			}
+		}
+	}
+
+	// 2. Load resource tokens if any (for translating chapter tokens like #L4D360UI_...)
+	tokens := make(map[string]string)
+	for key, entry := range v.entries {
+		if strings.EqualFold(entry.Extension, "txt") && strings.HasPrefix(strings.ToLower(entry.Path), "resource") {
+			if raw, err := v.ReadFile(key); err == nil {
+				resKV := parseKVTokens(tokenizeKV(DecodeText(raw)))
+				var walkTokens func(nodes []*KVNode)
+				walkTokens = func(nodes []*KVNode) {
+					for _, node := range nodes {
+						if len(node.Children) > 0 {
+							walkTokens(node.Children)
+						} else if node.Value != "" {
+							tokens[strings.ToLower(node.Key)] = node.Value
+							tokens[strings.ToLower(strings.TrimPrefix(node.Key, "#"))] = node.Value
+						}
+					}
+				}
+				walkTokens(resKV)
+			}
+		}
+	}
+
+	// 3. Collect chapters from mission files
+	var missionMaps []models.MapInfo
+	for key, entry := range v.entries {
+		if strings.EqualFold(entry.Extension, "txt") && (strings.HasPrefix(strings.ToLower(entry.Path), "missions") || strings.Contains(strings.ToLower(entry.Path), "missions")) {
+			if raw, err := v.ReadFile(key); err == nil {
+				parsed := parseMissionMaps(DecodeText(raw), tokens)
+				if len(parsed) > 0 {
+					missionMaps = append(missionMaps, parsed...)
+				}
+			}
+		}
+	}
+
+	// 4. Merge mission maps and BSP maps
+	var result []models.MapInfo
+	used := make(map[string]bool)
+
+	if len(missionMaps) > 0 {
+		for _, m := range missionMaps {
+			lower := strings.ToLower(m.Name)
+			// If BSP exists or there are no BSPs in VPK (e.g. mission-only mod), include it
+			if len(bspMapNames) == 0 || seenBsp[lower] {
+				if !used[lower] {
+					used[lower] = true
+					result = append(result, m)
+				}
+			}
+		}
+	}
+
+	// Append any remaining BSPs that were not mentioned in mission files
+	sort.Slice(bspMapNames, func(i, j int) bool {
+		return naturalCompare(bspMapNames[i], bspMapNames[j])
+	})
+	for _, bsp := range bspMapNames {
+		lower := strings.ToLower(bsp)
+		if !used[lower] {
+			used[lower] = true
+			result = append(result, models.MapInfo{
+				Name: bsp,
+			})
+		}
+	}
+
+	// 5. Filter out background menu maps if there are other playable maps
+	if len(result) > 1 {
+		var filtered []models.MapInfo
+		for _, m := range result {
+			if !isBackgroundMap(m.Name) {
+				filtered = append(filtered, m)
+			}
+		}
+		if len(filtered) > 0 {
+			result = filtered
+		}
+	}
+
+	return result
+}
+
+// ExtractMetadata opens the VPK once and extracts both addon title and maps
+func ExtractMetadata(vpkPath string) (*string, []models.MapInfo, error) {
+	v, err := Open(vpkPath)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer v.Close()
+
+	var title *string
+	if v.HasFile("addoninfo.txt") {
+		if raw, err := v.ReadFile("addoninfo.txt"); err == nil {
+			t := ParseAddonTitle(DecodeText(raw))
+			if t != "" {
+				title = &t
+			}
+		}
+	}
+
+	maps := v.ExtractMaps()
+	return title, maps, nil
+}
+
+// ExtractMapNames opens the VPK and retrieves all map names
+func ExtractMapNames(vpkPath string) ([]models.MapInfo, error) {
+	v, err := Open(vpkPath)
+	if err != nil {
+		return nil, err
+	}
+	defer v.Close()
+
+	return v.ExtractMaps(), nil
 }

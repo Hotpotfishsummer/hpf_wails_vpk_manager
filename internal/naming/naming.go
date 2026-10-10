@@ -8,7 +8,7 @@ import (
 )
 
 var (
-	illegalCharsRegex = regexp.MustCompile(`[^a-zA-Z0-9_-]`)
+	illegalCharsRegex = regexp.MustCompile(`[^\p{Han}a-zA-Z0-9_\-]`)
 	multiUnderscores  = regexp.MustCompile(`_{2,}`)
 	workshopIDRegex   = regexp.MustCompile(`(\d{8,})`)
 )
@@ -46,26 +46,31 @@ func VpkStemForAssociation(filename string) string {
 	return strings.TrimSuffix(name, ext)
 }
 
-// SanitizeAddonTitle cleans a title into L4D2-safe characters (ASCII alphanumeric, underscore, hyphen)
+func truncateRunes(s string, maxRunes int) string {
+	runes := []rune(s)
+	if len(runes) > maxRunes {
+		return string(runes[:maxRunes])
+	}
+	return s
+}
+
+// SanitizeAddonTitle cleans a title into L4D2-safe characters (ASCII alphanumeric, underscore, hyphen, and Chinese characters)
 func SanitizeAddonTitle(title string) string {
 	if title == "" {
 		return ""
 	}
 	s := strings.TrimSpace(strings.ReplaceAll(title, " ", "_"))
-	s = strings.TrimRight(s, ".")
 	s = illegalCharsRegex.ReplaceAllString(s, "_")
 	s = multiUnderscores.ReplaceAllString(s, "_")
-	return strings.TrimRight(s, ".")
+	return strings.Trim(s, "._-")
 }
 
-// BuildExportBaseName generates a sanitized base filename based on addontitle and workshop ID
-func BuildExportBaseName(addontitle, filename, fallbackStem string) string {
+// BuildExportBaseNameWithNote generates a sanitized base filename based on addontitle, user note and workshop ID
+func BuildExportBaseNameWithNote(addontitle, filename, fallbackStem, note string) string {
 	workshopID := ExtractWorkshopID(filename)
 
 	safeFallback := SanitizeAddonTitle(fallbackStem)
-	if len(safeFallback) > maxBaseNameLen {
-		safeFallback = safeFallback[:maxBaseNameLen]
-	}
+	safeFallback = truncateRunes(safeFallback, maxBaseNameLen)
 
 	nonIDPart := safeFallback
 	if workshopID != "" {
@@ -79,22 +84,43 @@ func BuildExportBaseName(addontitle, filename, fallbackStem string) string {
 		}
 	}
 
-	if addontitle == "" {
-		return safeFallback
+	cleanTitle := SanitizeAddonTitle(addontitle)
+	cleanNote := SanitizeAddonTitle(note)
+
+	var combined string
+	if cleanTitle != "" && cleanNote != "" {
+		if strings.Contains(cleanTitle, cleanNote) {
+			combined = cleanTitle
+		} else {
+			combined = cleanTitle + "_" + cleanNote
+		}
+	} else if cleanTitle != "" {
+		combined = cleanTitle
+	} else if cleanNote != "" {
+		combined = cleanNote
 	}
 
-	baseName := SanitizeAddonTitle(addontitle)
-	if len(baseName) > maxBaseNameLen {
-		baseName = baseName[:maxBaseNameLen]
-	}
-	if strings.Trim(baseName, "_-") == "" {
-		baseName = safeFallback
+	combined = multiUnderscores.ReplaceAllString(combined, "_")
+	combined = strings.Trim(combined, "._-")
+	if combined == "" {
+		combined = safeFallback
 	}
 
-	if workshopID != "" && !strings.Contains(baseName, workshopID) {
-		baseName = baseName + "-" + workshopID
+	combined = truncateRunes(combined, maxBaseNameLen)
+	combined = strings.Trim(combined, "._-")
+	if combined == "" {
+		combined = safeFallback
 	}
-	return baseName
+
+	if workshopID != "" && !strings.Contains(combined, workshopID) {
+		combined = combined + "-" + workshopID
+	}
+	return combined
+}
+
+// BuildExportBaseName generates a sanitized base filename based on addontitle and workshop ID
+func BuildExportBaseName(addontitle, filename, fallbackStem string) string {
+	return BuildExportBaseNameWithNote(addontitle, filename, fallbackStem, "")
 }
 
 // FindAssociatedImages scans the directory for images associated with the VPK file (case-insensitive)

@@ -1,37 +1,61 @@
 <template>
   <div class="directory-selector">
-    <div class="input-group">
-      <div class="input-wrapper">
-        <span class="folder-icon">📁</span>
+    <div class="selector-card">
+      <div class="path-display-box">
+        <div class="folder-badge">
+          <SvgIcon name="folder" :size="16" />
+        </div>
         <input
           id="directory-path"
           v-model="store.currentDirectory"
           type="text"
           :placeholder="$t('enterFolderPath')"
           readonly
-          class="input-field"
+          class="path-input"
         />
+        <div class="path-actions" v-if="store.currentDirectory">
+          <button
+            class="path-mini-btn"
+            @click="handleCopyPath"
+            :title="$t('copyPath', '复制路径')"
+          >
+            <SvgIcon :name="copied ? 'check' : 'copy'" :size="14" />
+          </button>
+          <button
+            class="path-mini-btn"
+            @click="store.openAddonsFolder"
+            :title="$t('openInFileManager')"
+          >
+            <SvgIcon name="external-link" :size="14" />
+          </button>
+        </div>
       </div>
-      <div class="button-group">
-        <button 
+
+      <div class="action-buttons-group">
+        <!-- 导入模组按钮 -->
+        <button
           @click="handleImport"
           :disabled="!store.currentDirectory || store.isImporting"
-          class="btn btn-import"
+          class="btn-import-box"
           :class="{ 'btn-loading': store.isImporting }"
           :title="!store.currentDirectory ? $t('needSelectL4d2') : $t('importFiles')"
         >
-          <span v-if="store.isImporting" class="btn-spinner"></span>
-          <span class="btn-text">{{ store.isImporting ? $t('importing') : $t('importFiles') }}</span>
+          <SvgIcon v-if="store.isImporting" name="loader" :size="15" :spin="true" />
+          <SvgIcon v-else name="import" :size="15" />
+          <span>{{ store.isImporting ? $t('importing') : $t('importFiles') }}</span>
         </button>
-        <button 
-          @click="handleBrowse" 
+
+        <!-- 浏览并选择安装目录按钮 -->
+        <button
+          @click="handleBrowse"
           :disabled="isLoading"
-          class="btn btn-browse"
+          class="btn-browse-box"
           :class="{ 'btn-loading': isLoading }"
           :title="isLoading ? $t('browsing') : $t('browseFolder')"
         >
-          <span v-if="isLoading" class="btn-spinner"></span>
-          <span class="btn-text">{{ isLoading ? $t('browsing') : $t('browseFolder') }}</span>
+          <SvgIcon v-if="isLoading" name="loader" :size="15" :spin="true" />
+          <SvgIcon v-else name="folder-open" :size="15" />
+          <span>{{ isLoading ? $t('browsing') : $t('browseFolder') }}</span>
         </button>
       </div>
     </div>
@@ -42,23 +66,41 @@
 import { useVpkManagerStore } from '@/stores/vpk-manager'
 import { useI18n } from 'vue-i18n'
 import { ref } from 'vue'
+import { getApi } from '@/composables/useApi'
+import SvgIcon from '@/components/common/SvgIcon.vue'
 
 const { t: $t } = useI18n()
-
 const store = useVpkManagerStore()
 const isLoading = ref(false)
+const copied = ref(false)
+
+async function handleCopyPath() {
+  if (!store.currentDirectory) return
+  try {
+    await navigator.clipboard.writeText(store.currentDirectory)
+    copied.value = true
+    setTimeout(() => {
+      copied.value = false
+    }, 2000)
+  } catch (e) {
+    console.error('Failed to copy path', e)
+  }
+}
 
 async function handleImport() {
   if (store.isImporting || !store.currentDirectory) return
-  
+
   try {
     const result = await store.importVpks()
     if (result) {
       if ((result.imported_count ?? 0) > 0) {
         const type = result.success ? 'success' : 'info'
-        const msg = result.success 
-          ? $t('importSuccess', { count: result.imported_count }) 
-          : $t('importDonePartial', { success: result.imported_count, failed: result.errors ? result.errors.length : 0 })
+        const msg = result.success
+          ? $t('importSuccess', { count: result.imported_count })
+          : $t('importDonePartial', {
+              success: result.imported_count,
+              failed: result.errors ? result.errors.length : 0,
+            })
         store.showNotification(msg, type)
       } else if (result.error) {
         store.showNotification($t('importFailedWithError', { error: result.error }), 'error')
@@ -71,29 +113,18 @@ async function handleImport() {
 
 async function handleBrowse() {
   if (isLoading.value) return
-  
+
   try {
     isLoading.value = true
-    
-    // 等待 API 就绪（最多等待 3 秒）
-    let waited = 0
-    while (!(window.pywebview && window.pywebview.api) && waited < 3000) {
-      await new Promise(resolve => setTimeout(resolve, 100))
-      waited += 100
-    }
-    
-    if (!(window.pywebview && window.pywebview.api)) {
-      store.showNotification($t('apiNotInitialized'), 'error')
-      return
-    }
-    
-    const selectedPath = await window.pywebview.api.browse_directory()
-    
+    const selectedPath = await getApi().browse_directory()
     if (selectedPath) {
       await store.scanVpks(selectedPath)
     }
   } catch (error) {
-    store.showNotification($t('browseError', { error: error instanceof Error ? error.message : String(error) }), 'error')
+    store.showNotification(
+      $t('browseError', { error: error instanceof Error ? error.message : String(error) }),
+      'error'
+    )
     console.error('选择文件夹失败:', error)
   } finally {
     isLoading.value = false
@@ -103,111 +134,122 @@ async function handleBrowse() {
 
 <style scoped>
 .directory-selector {
-  background: rgba(30, 41, 59, 0.5);
-  padding: 16px;
-  border-radius: 12px;
-  border: 1px solid rgba(148, 163, 184, 0.15);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  width: 100%;
 }
 
-.input-group {
+.selector-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 10px 14px;
   display: flex;
   align-items: center;
   gap: 12px;
+  box-shadow: var(--shadow-sm);
+  transition: border-color var(--transition-fast);
 }
 
-.input-wrapper {
+.selector-card:hover {
+  border-color: var(--border-medium);
+}
+
+.path-display-box {
   flex: 1;
-  position: relative;
+  display: flex;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 4px 10px;
+  gap: 8px;
+  min-width: 0;
+}
+
+.folder-badge {
+  color: var(--accent-primary);
   display: flex;
   align-items: center;
 }
 
-.folder-icon {
-  position: absolute;
-  left: 12px;
-  font-size: 16px;
-  opacity: 0.7;
-}
-
-.input-field {
-  width: 100%;
-  padding: 8px 14px 8px 38px;
-  border: 1px solid rgba(148, 163, 184, 0.15);
-  border-radius: 6px;
+.path-input {
+  flex: 1;
+  background: transparent !important;
+  border: none !important;
+  padding: 4px 0 !important;
   font-size: 13px;
-  background-color: rgba(15, 23, 42, 0.4);
-  color: #e2e8f0;
-  transition: all 0.3s ease;
-  font-weight: 500;
+  color: var(--text-main);
+  box-shadow: none !important;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
   cursor: default;
 }
 
-.input-field:focus {
-  outline: none;
-  border-color: rgba(59, 130, 246, 0.5);
+.path-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
-.button-group {
+.path-mini-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  background: transparent !important;
+  border: none !important;
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+}
+
+.path-mini-btn:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: #fff;
+}
+
+.action-buttons-group {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-shrink: 0;
 }
 
-.btn {
-  padding: 8px 16px;
-  border: none;
-  border-radius: 8px;
-  font-size: 13px;
+/* 导入按钮 */
+.btn-import-box {
+  height: 36px;
+  padding: 0 14px;
+  border-radius: var(--radius-md);
+  background: rgba(16, 185, 129, 0.12);
+  color: var(--accent-success);
+  border: 1px solid rgba(16, 185, 129, 0.3);
   font-weight: 600;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  transition: all 0.2s ease;
-  white-space: nowrap;
+  font-size: 13px;
 }
 
-.btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.btn-import-box:hover:not(:disabled) {
+  background: rgba(16, 185, 129, 0.22);
+  border-color: rgba(16, 185, 129, 0.5);
+  box-shadow: 0 0 12px var(--accent-success-glow);
 }
 
-.btn-import {
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-  color: white;
+/* 浏览文件夹主按钮 */
+.btn-browse-box {
+  height: 36px;
+  padding: 0 16px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+  color: #fff;
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  font-weight: 600;
+  font-size: 13px;
+  box-shadow: 0 2px 8px rgba(2, 132, 199, 0.3);
 }
 
-.btn-import:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
-}
-
-.btn-browse {
-  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-  color: white;
-}
-
-.btn-browse:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
-}
-
-.btn-loading {
-  opacity: 0.8;
-  cursor: wait;
-}
-
-.btn-spinner {
-  width: 14px;
-  height: 14px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  border-top-color: white;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
+.btn-browse-box:hover:not(:disabled) {
+  background: linear-gradient(135deg, #0369a1 0%, #075985 100%);
+  box-shadow: 0 4px 14px rgba(2, 132, 199, 0.5);
 }
 </style>

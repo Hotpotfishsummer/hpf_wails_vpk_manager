@@ -106,3 +106,85 @@ func TestExportAndImport(t *testing.T) {
 		t.Errorf("extracted image missing: %s", extractedImg)
 	}
 }
+
+func TestNotesService(t *testing.T) {
+	tempDir := t.TempDir()
+	notesSvc := NewNotesService(tempDir)
+
+	workshopVpk := "C:\\steam\\addons\\workshop\\123456789.vpk"
+	localVpk := "C:\\steam\\addons\\my_mod.vpk"
+
+	if err := notesSvc.SetNote(workshopVpk, "连喷（超大声！）"); err != nil {
+		t.Fatalf("SetNote failed: %v", err)
+	}
+	if err := notesSvc.SetNote(localVpk, "AK47-雷神涂装"); err != nil {
+		t.Fatalf("SetNote failed: %v", err)
+	}
+
+	// 验证按 workshopID 获取
+	note1 := notesSvc.GetNote(workshopVpk)
+	if note1 != "连喷（超大声！）" {
+		t.Errorf("GetNote workshop = %q, want '连喷（超大声！）'", note1)
+	}
+
+	// 即使路径变到 addons，根据 workshopID 也能认出
+	relocatedVpk := "C:\\steam\\addons\\123456789.vpk"
+	noteRelocated := notesSvc.GetNote(relocatedVpk)
+	if noteRelocated != "连喷（超大声！）" {
+		t.Errorf("GetNote relocated = %q, want '连喷（超大声！）'", noteRelocated)
+	}
+
+	// 即使被重命名为 .disabled，依然能读出备注
+	disabledVpk := "C:\\steam\\addons\\my_mod.vpk.disabled"
+	noteDisabled := notesSvc.GetNote(disabledVpk)
+	if noteDisabled != "AK47-雷神涂装" {
+		t.Errorf("GetNote disabled = %q, want 'AK47-雷神涂装'", noteDisabled)
+	}
+
+	// 重新加载测试持久化
+	notesSvc2 := NewNotesService(tempDir)
+	if n := notesSvc2.GetNote(workshopVpk); n != "连喷（超大声！）" {
+		t.Errorf("Persisted note = %q", n)
+	}
+}
+
+func TestExportWithBetterNamingAndNotes(t *testing.T) {
+	tempDir := t.TempDir()
+	notesSvc := NewNotesService(tempDir)
+	metaSvc := NewVpkMetadataService(filepath.Join(tempDir, "cache"))
+	metaSvc.SetNotesService(notesSvc)
+	exportSvc := NewExportService(metaSvc, notesSvc)
+
+	srcDir := filepath.Join(tempDir, "src")
+	_ = os.MkdirAll(srcDir, 0755)
+	vpkPath := filepath.Join(srcDir, "123456789.vpk")
+	_ = os.WriteFile(vpkPath, []byte("fake vpk"), 0644)
+
+	// 设置带特殊中文符号的备注
+	_ = notesSvc.SetNote(vpkPath, "【全自动连喷】（自制音效！）")
+
+	outDir := filepath.Join(tempDir, "out")
+	res := exportSvc.ExportVpks([]string{vpkPath}, outDir, true, true, nil)
+	if !res.Success {
+		t.Fatalf("ExportVpks failed: %s", res.Error)
+	}
+
+	// 解压并验证归档内的文件名保留汉字且去掉了中文特殊符号
+	targetAddons := filepath.Join(tempDir, "extracted")
+	_ = os.MkdirAll(targetAddons, 0755)
+	importSvc := NewImportService()
+	impRes := importSvc.ImportCompressedFiles([]string{res.FilePath}, targetAddons)
+	if !impRes.Success {
+		t.Fatalf("ImportCompressedFiles failed: %+v", impRes.Errors)
+	}
+
+	expectedName := "全自动连喷_自制音效-123456789.vpk"
+	extractedFile := filepath.Join(targetAddons, expectedName)
+	if _, err := os.Stat(extractedFile); err != nil {
+		t.Errorf("Expected exported file %s not found, checking directory contents", expectedName)
+		entries, _ := os.ReadDir(targetAddons)
+		for _, e := range entries {
+			t.Logf("Found file: %s", e.Name())
+		}
+	}
+}

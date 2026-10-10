@@ -7,6 +7,11 @@ import type { RemoteFile } from '@/types/api'
 // 组件外使用 vue-i18n 的全局实例,保证通知文案跟随当前语言
 const $t = i18n.global.t
 
+export interface MapInfo {
+  name: string
+  display_name?: string
+}
+
 export interface VpkFile {
   name: string
   path: string
@@ -17,6 +22,8 @@ export interface VpkFile {
   thumbnail_path?: string
   addontitle?: string
   display_name: string
+  note?: string
+  maps?: MapInfo[]
 }
 
 export const useVpkManagerStore = defineStore('vpkManager', () => {
@@ -24,19 +31,89 @@ export const useVpkManagerStore = defineStore('vpkManager', () => {
   const localVpkFiles = ref<VpkFile[]>([])
   const workshopVpkFiles = ref<VpkFile[]>([])
   const searchQuery = ref<string>('')
+  const filterStatus = ref<'all' | 'enabled' | 'disabled'>('all')
+  const sortKey = ref<'name' | 'size' | 'date'>('name')
+  const sortAsc = ref<boolean>(true)
+  const viewMode = ref<'card' | 'compact'>('card')
+  const actionBarPosition = ref<'bottom' | 'top'>('bottom')
+
+  try {
+    const saved = localStorage.getItem('vpk-view-mode')
+    if (saved === 'card' || saved === 'compact') {
+      viewMode.value = saved
+    }
+  } catch {}
+
+  try {
+    const savedPos = localStorage.getItem('vpk-actionbar-pos')
+    if (savedPos === 'bottom' || savedPos === 'top') {
+      actionBarPosition.value = savedPos
+    }
+  } catch {}
+
+  function setViewMode(mode: 'card' | 'compact') {
+    viewMode.value = mode
+    try {
+      localStorage.setItem('vpk-view-mode', mode)
+    } catch {}
+  }
+
+  function setActionBarPosition(pos: 'bottom' | 'top') {
+    actionBarPosition.value = pos
+    try {
+      localStorage.setItem('vpk-actionbar-pos', pos)
+    } catch {}
+  }
+
+  function toggleActionBarPosition() {
+    setActionBarPosition(actionBarPosition.value === 'bottom' ? 'top' : 'bottom')
+  }
 
   function matchesQuery(vpk: VpkFile, query: string): boolean {
     const q = query.trim().toLowerCase()
     if (!q) return true
-    return vpk.display_name.toLowerCase().includes(q) || vpk.name.toLowerCase().includes(q)
+    return (
+      vpk.display_name.toLowerCase().includes(q) ||
+      vpk.name.toLowerCase().includes(q) ||
+      (vpk.note ? vpk.note.toLowerCase().includes(q) : false) ||
+      (vpk.maps ? vpk.maps.some((m) => m.name.toLowerCase().includes(q) || (m.display_name ? m.display_name.toLowerCase().includes(q) : false)) : false)
+    )
   }
 
-  const filteredLocalVpkFiles = computed(() =>
-    localVpkFiles.value.filter((vpk) => matchesQuery(vpk, searchQuery.value))
-  )
-  const filteredWorkshopVpkFiles = computed(() =>
-    workshopVpkFiles.value.filter((vpk) => matchesQuery(vpk, searchQuery.value))
-  )
+  function processFiles(files: VpkFile[]): VpkFile[] {
+    let list = files.filter((vpk) => matchesQuery(vpk, searchQuery.value))
+    if (filterStatus.value === 'enabled') {
+      list = list.filter((vpk) => !vpk.is_disabled)
+    } else if (filterStatus.value === 'disabled') {
+      list = list.filter((vpk) => vpk.is_disabled)
+    }
+
+    return [...list].sort((a, b) => {
+      let cmp = 0
+      if (sortKey.value === 'name') {
+        cmp = a.display_name.localeCompare(b.display_name, 'zh-CN')
+      } else if (sortKey.value === 'size') {
+        cmp = a.size - b.size
+      } else if (sortKey.value === 'date') {
+        cmp = a.modified_time - b.modified_time
+      }
+      return sortAsc.value ? cmp : -cmp
+    })
+  }
+
+  const filteredLocalVpkFiles = computed(() => processFiles(localVpkFiles.value))
+  const filteredWorkshopVpkFiles = computed(() => processFiles(workshopVpkFiles.value))
+
+  const totalModStats = computed(() => {
+    const all = [...localVpkFiles.value, ...workshopVpkFiles.value]
+    return {
+      total: all.length,
+      enabled: all.filter((v) => !v.is_disabled).length,
+      disabled: all.filter((v) => v.is_disabled).length,
+      local: localVpkFiles.value.length,
+      workshop: workshopVpkFiles.value.length,
+    }
+  })
   const selectedLocalVpks = reactive(new Set<string>())
   const selectedWorkshopVpks = reactive(new Set<string>())
   const isScanning = ref(false)
@@ -144,6 +221,11 @@ export const useVpkManagerStore = defineStore('vpkManager', () => {
     }
   }
 
+  function clearSelection() {
+    selectedLocalVpks.clear()
+    selectedWorkshopVpks.clear()
+  }
+
   function getSelectedVpkPaths(): string[] {
     return [...Array.from(selectedLocalVpks), ...Array.from(selectedWorkshopVpks)]
   }
@@ -164,6 +246,9 @@ async function scanVpks(directory: string) {
         workshopVpkFiles.value = result.workshop_vpks || []
         selectedLocalVpks.clear()
         selectedWorkshopVpks.clear()
+        if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('selected') === '1' && localVpkFiles.value.length > 0) {
+          selectedLocalVpks.add(localVpkFiles.value[0].path)
+        }
         console.log(`Successfully scanned ${localVpkFiles.value.length + workshopVpkFiles.value.length} files`)
       } else {
         showNotification(result.error || $t('scanFailed'), 'error')
@@ -291,14 +376,19 @@ async function saveSftpSettings() {
     }
   }
 
-  function selectAllRemote() {
-    remoteVpkFiles.value.forEach(vpk => {
-      selectedRemoteVpks.add(vpk.path)
+  function selectAllRemote(paths?: string[]) {
+    const list = paths ?? remoteVpkFiles.value.map(v => v.path)
+    list.forEach(p => {
+      selectedRemoteVpks.add(p)
     })
   }
 
-  function deselectAllRemote() {
-    selectedRemoteVpks.clear()
+  function deselectAllRemote(paths?: string[]) {
+    if (paths) {
+      paths.forEach(p => selectedRemoteVpks.delete(p))
+    } else {
+      selectedRemoteVpks.clear()
+    }
   }
 
     /** 列出远端 addons 目录的 VPK 文件 */
@@ -580,11 +670,42 @@ async function uploadLocalVpks() {
     return ''
   }
 
+  async function updateVpkNote(vpkPath: string, note: string): Promise<boolean> {
+    const res = await callApi(api => api.set_vpk_note(vpkPath, note), { success: false, error: '调用失败' })
+    if (res.success) {
+      const cleanNote = note.trim()
+      const updateList = (list: VpkFile[]) => {
+        const item = list.find(v => v.path === vpkPath)
+        if (item) {
+          item.note = cleanNote
+          const rawTitle = item.addontitle && item.addontitle.trim() ? item.addontitle.trim() : item.name
+          item.display_name = cleanNote ? `${rawTitle} [${cleanNote}]` : rawTitle
+        }
+      }
+      updateList(localVpkFiles.value)
+      updateList(workshopVpkFiles.value)
+      showNotification($t('noteSaved', '备注已保存'), 'success')
+      return true
+    } else {
+      showNotification(res.error || $t('saveNoteFailed', '保存备注失败'), 'error')
+      return false
+    }
+  }
+
   return {
     currentDirectory,
     localVpkFiles,
     workshopVpkFiles,
     searchQuery,
+    filterStatus,
+    sortKey,
+    sortAsc,
+    viewMode,
+    setViewMode,
+    actionBarPosition,
+    setActionBarPosition,
+    toggleActionBarPosition,
+    totalModStats,
     filteredLocalVpkFiles,
     filteredWorkshopVpkFiles,
     selectedLocalVpks,
@@ -619,6 +740,7 @@ async function uploadLocalVpks() {
     deselectAllWorkshop,
     selectAllRemote,
     deselectAllRemote,
+    clearSelection,
     getSelectedVpkPaths,
     scanVpks,
     importVpks,
@@ -637,6 +759,7 @@ async function uploadLocalVpks() {
     openWorkshopFolder,
     exportVpks,
     deleteVpks,
-    getLastDirectory
+    getLastDirectory,
+    updateVpkNote
   }
 })

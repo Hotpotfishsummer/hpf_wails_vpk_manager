@@ -1,90 +1,141 @@
 <template>
-  <div class="fixed-top-section">
-    <div class="main-wrapper action-bar">
-      <div class="action-buttons">
+  <div :class="['action-bar-docked', `dock-${props.position}`]">
+    <!-- 忙碌进度条 (若处于顶部停靠则置于下边缘，若处于底部停靠则置于上边缘) -->
+    <div v-if="isAnyBusy && props.position === 'bottom'" class="dock-progress-bar">
+      <div class="dock-progress-fill" :style="{ width: progressWidth }"></div>
+      <span class="dock-progress-text">{{ busyText }}</span>
+    </div>
+
+    <div class="dock-body">
+      <!-- 左侧：选中统计与取消全选 -->
+      <div class="dock-section dock-left">
+        <div class="selection-badge">
+          <span class="badge-dot"></span>
+          <span class="badge-text">{{ selectionCountText }}</span>
+        </div>
+
+        <button
+          class="dock-btn-clear"
+          @click="handleClearSelection"
+          :title="$t('deselectAll')"
+        >
+          <SvgIcon name="x" :size="13" />
+          <span>{{ $t('deselectAll') }}</span>
+        </button>
+      </div>
+
+      <div class="dock-divider"></div>
+
+      <!-- 中间：核心操作按钮组 -->
+      <div class="dock-section dock-actions">
+        <!-- 导出文件 -->
         <button
           @click="handleExport"
           :disabled="store.isExporting"
-          class="btn btn-export"
+          class="dock-btn btn-export"
           :class="{ 'btn-loading': store.isExporting }"
+          :title="$t('exportFiles')"
         >
-          <span class="btn-icon" v-if="!store.isExporting">⬇️</span>
-          <span class="btn-spinner" v-else></span>
-          {{ store.isExporting ? $t('exporting') : $t('exportFiles') }}
+          <SvgIcon v-if="store.isExporting" name="loader" :size="14" :spin="true" />
+          <SvgIcon v-else name="export" :size="14" />
+          <span>{{ store.isExporting ? $t('exporting') : $t('exportFiles') }}</span>
         </button>
+
+        <!-- 本地化工坊模组 -->
         <button
           v-if="store.selectedWorkshopVpks.size > 0 && store.selectedLocalVpks.size === 0"
           @click="handleLocalize"
           :disabled="store.isLocalizing"
-          class="btn btn-localize"
+          class="dock-btn btn-localize"
           :class="{ 'btn-loading': store.isLocalizing }"
           :title="$t('localizeTooltip')"
         >
-          <span class="btn-icon" v-if="!store.isLocalizing">📦</span>
-          <span class="btn-spinner" v-else></span>
-          {{ store.isLocalizing ? $t('converting') : $t('localize') }}
+          <SvgIcon v-if="store.isLocalizing" name="loader" :size="14" :spin="true" />
+          <SvgIcon v-else name="box" :size="14" />
+          <span>{{ store.isLocalizing ? $t('converting') : $t('localize') }}</span>
         </button>
+
+        <!-- 上传到远程 SFTP -->
         <button
           v-if="store.isSftpActive && (store.selectedLocalVpks.size > 0 || store.selectedWorkshopVpks.size > 0)"
           @click="store.uploadLocalVpks"
           :disabled="store.isUploading"
-          class="btn btn-upload"
+          class="dock-btn btn-upload"
           :class="{ 'btn-loading': store.isUploading }"
+          :title="$t('uploadToSftp')"
         >
-          <span class="btn-icon" v-if="!store.isUploading">☁️</span>
-          <span class="btn-spinner" v-else></span>
-          {{ store.isUploading ? $t('uploading') : $t('uploadToSftp') }}
+          <SvgIcon v-if="store.isUploading" name="loader" :size="14" :spin="true" />
+          <SvgIcon v-else name="cloud-upload" :size="14" />
+          <span>{{ store.isUploading ? $t('uploading') : $t('uploadToSftp') }}</span>
         </button>
+
+        <!-- 禁用 -->
         <button
           @click="handleDisable"
           :disabled="store.isDeleting"
-          class="btn btn-disable"
+          class="dock-btn btn-disable"
+          :title="$t('disable')"
         >
-          <span class="btn-icon">🚫</span>
-          {{ store.isDeleting ? $t('processing') : $t('disable') }}
+          <SvgIcon name="ban" :size="13" />
+          <span>{{ $t('disable') }}</span>
         </button>
+
+        <!-- 启用 -->
         <button
           @click="handleEnable"
           :disabled="store.isDeleting"
-          class="btn btn-enable"
+          class="dock-btn btn-enable"
+          :title="$t('enable')"
         >
-          <span class="btn-icon">✔️</span>
-          {{ store.isDeleting ? $t('processing') : $t('enable') }}
+          <SvgIcon name="check" :size="13" />
+          <span>{{ $t('enable') }}</span>
         </button>
+
+        <!-- 彻底删除 -->
         <button
           @click="handleDelete"
           :disabled="store.isDeleting"
-          class="btn btn-delete"
+          class="dock-btn btn-delete"
+          :title="$t('hardDelete')"
         >
-          <span class="btn-icon">🗑️</span>
-          {{ store.isDeleting ? $t('deleting') : $t('hardDelete') }}
+          <SvgIcon name="trash" :size="13" />
+          <span>{{ $t('hardDelete') }}</span>
         </button>
+      </div>
 
-        <!-- Better Naming Checkbox -->
-        <label class="better-naming-checkbox">
+      <div class="dock-divider"></div>
+
+      <!-- 右侧：导出选项开关与停靠切换 -->
+      <div class="dock-section dock-right">
+        <label class="dock-checkbox" :title="$t('betterNamingHelp')">
           <input type="checkbox" v-model="store.useBetterNaming" />
-          <span class="checkbox-text">{{ $t('betterNaming') }}</span>
-          <span class="checkbox-help" :title="$t('betterNamingHelp')">❓</span>
+          <span class="option-label">{{ $t('betterNaming') }}</span>
+          <SvgIcon name="help-circle" :size="12" class="help-icon" />
         </label>
 
-        <label class="better-naming-checkbox">
+        <label class="dock-checkbox">
           <input type="checkbox" v-model="store.useAutoOpenExport" />
-          <span class="checkbox-text">{{ $t('autoOpenExport') }}</span>
+          <span class="option-label">{{ $t('autoOpenExport') }}</span>
         </label>
 
-        <span class="selection-info">
-          {{ selectionCountText }}
-        </span>
-      </div>
+        <div class="dock-divider-mini"></div>
 
-      <!-- Export progress indicator -->
-      <!-- Unified busy progress indicator -->
-      <div v-if="isAnyBusy" class="export-progress">
-        <div class="progress-bar">
-          <div class="progress-fill" :style="{ width: progressWidth }"></div>
-        </div>
-        <span class="progress-text">{{ busyText }}</span>
+        <!-- 停靠位置切换按钮 -->
+        <button
+          class="dock-pos-toggle"
+          @click="store.toggleActionBarPosition()"
+          :title="positionTooltip"
+        >
+          <SvgIcon :name="props.position === 'bottom' ? 'chevron-up' : 'chevron-down'" :size="13" />
+          <span class="toggle-text">{{ props.position === 'bottom' ? $t('dockToTop') : $t('dockToBottom') }}</span>
+        </button>
       </div>
+    </div>
+
+    <!-- 忙碌进度条 (顶部停靠时置于下边缘) -->
+    <div v-if="isAnyBusy && props.position === 'top'" class="dock-progress-bar">
+      <div class="dock-progress-fill" :style="{ width: progressWidth }"></div>
+      <span class="dock-progress-text">{{ busyText }}</span>
     </div>
   </div>
 </template>
@@ -93,6 +144,17 @@
 import { computed } from 'vue'
 import { useVpkManagerStore } from '@/stores/vpk-manager'
 import { useI18n } from 'vue-i18n'
+import { getApi } from '@/composables/useApi'
+import SvgIcon from '@/components/common/SvgIcon.vue'
+
+const props = withDefaults(
+  defineProps<{
+    position?: 'bottom' | 'top'
+  }>(),
+  {
+    position: 'bottom'
+  }
+)
 
 const store = useVpkManagerStore()
 const { t: $t } = useI18n()
@@ -105,13 +167,22 @@ const selectionCountText = computed(() => {
   return $t('selectionInfo', { count: selectionCount.value })
 })
 
+const positionTooltip = computed(() => {
+  return props.position === 'bottom' ? $t('dockToTop') : $t('dockToBottom')
+})
+
 const isAnyBusy = computed(() => {
-  return store.isExporting || store.isUploading || store.isDownloading ||
-         store.isImporting || store.isLocalizing || store.isDeleting
+  return (
+    store.isExporting ||
+    store.isUploading ||
+    store.isDownloading ||
+    store.isImporting ||
+    store.isLocalizing ||
+    store.isDeleting
+  )
 })
 
 const busyText = computed(() => {
-  if (store.isExporting) return $t('packingFiles')
   if (store.isExporting) {
     const { stage, done, total } = store.exportProgress
     if (stage === 'compressing') return $t('compressingArchive')
@@ -131,8 +202,12 @@ const progressWidth = computed(() => {
     const pct = Math.round((store.exportProgress.done / store.exportProgress.total) * 100)
     return `${pct}%`
   }
-  return '100%' // 非导出操作保持装饰性动画
+  return '100%'
 })
+
+function handleClearSelection() {
+  store.clearSelection()
+}
 
 async function handleExport() {
   try {
@@ -141,24 +216,16 @@ async function handleExport() {
       return
     }
 
-    if (!window.pywebview || !window.pywebview.api) {
-      store.showNotification($t('apiNotAvailable'), 'error')
-      return
-    }
-
-    // Get downloads directory from backend
     let outputDir = ''
     try {
-      const result = await window.pywebview.api.get_downloads_directory()
+      const result = await getApi().get_downloads_directory()
       outputDir = result || ''
-    } catch (error) {
-      console.warn('Failed to get downloads directory, using current directory')
+    } catch {
       outputDir = '.'
     }
 
     const result = await store.exportVpks(outputDir)
     if (result && result.exists) {
-      // 目标归档已存在，询问是否覆盖
       if (await store.showConfirm($t('confirmOverwriteExport'))) {
         await store.exportVpks(outputDir, true)
       }
@@ -178,8 +245,9 @@ async function handleLocalize() {
 
 async function handleDisable() {
   if (selectionCount.value === 0) return
-  const pathsToDisable = [...store.selectedLocalVpks, ...store.selectedWorkshopVpks]
-    .filter(path => !path.endsWith('.disabled'))
+  const pathsToDisable = [...store.selectedLocalVpks, ...store.selectedWorkshopVpks].filter(
+    (path) => !path.endsWith('.disabled')
+  )
 
   if (pathsToDisable.length > 0) {
     await store.deleteVpks(true, pathsToDisable)
@@ -188,8 +256,9 @@ async function handleDisable() {
 
 async function handleEnable() {
   if (selectionCount.value === 0) return
-  const pathsToEnable = [...store.selectedLocalVpks, ...store.selectedWorkshopVpks]
-    .filter(path => path.endsWith('.disabled'))
+  const pathsToEnable = [...store.selectedLocalVpks, ...store.selectedWorkshopVpks].filter(
+    (path) => path.endsWith('.disabled')
+  )
 
   if (pathsToEnable.length > 0) {
     await store.deleteVpks(true, pathsToEnable)
@@ -197,13 +266,13 @@ async function handleEnable() {
 }
 
 async function handleDelete() {
-  const selectedCount = selectionCount.value
-  if (selectedCount === 0) {
+  const selectedCountVal = selectionCount.value
+  if (selectedCountVal === 0) {
     store.showNotification($t('selectFiles'), 'error')
     return
   }
 
-  const message = $t('confirmHardDelete') + ` (${selectedCount})`
+  const message = $t('confirmHardDelete') + ` (${selectedCountVal})`
   if (await store.showConfirm(message)) {
     await store.deleteVpks(false)
   }
@@ -211,251 +280,326 @@ async function handleDelete() {
 </script>
 
 <style scoped>
-/* Fixed top section */
-.fixed-top-section {
-  background: rgba(15, 23, 42, 0.85);
-  backdrop-filter: blur(20px);
-  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
-  z-index: 90;
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-}
-
-/* 原 App.vue 中该元素同时挂 .main-wrapper;子组件不继承父级 scoped 样式,基础规则在此复制 */
-.main-wrapper {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 24px;
+/* 贴合固定工具条容器：纯色沉浸式深色底色，无毛玻璃马赛克模糊 */
+.action-bar-docked {
   width: 100%;
+  flex-shrink: 0;
+  background: #0d1525;
+  background: linear-gradient(180deg, #10192b 0%, #0c1220 100%);
+  position: relative;
+  z-index: 80;
   display: flex;
   flex-direction: column;
-  min-height: 100%;
 }
 
-.action-bar {
-  padding-top: 10px;
-  padding-bottom: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+/* 底部贴合形态 */
+.action-bar-docked.dock-bottom {
+  border-top: 1px solid rgba(56, 189, 248, 0.22);
+  box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
-.action-buttons {
+/* 顶部贴合形态 */
+.action-bar-docked.dock-top {
+  border-bottom: 1px solid rgba(56, 189, 248, 0.22);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5), inset 0 -1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* 进度条 */
+.dock-progress-bar {
+  width: 100%;
+  height: 18px;
+  background: rgba(0, 0, 0, 0.5);
+  position: relative;
   display: flex;
+  align-items: center;
+  overflow: hidden;
+}
+
+.dock-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #0284c7 0%, #38bdf8 100%);
+  transition: width 0.3s ease;
+}
+
+.dock-progress-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+/* 工具栏主体内容区 */
+.dock-body {
+  width: 100%;
+  max-width: 1480px;
+  margin: 0 auto;
+  padding: 8px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 12px;
-  align-items: center;
+  min-height: 50px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
 }
 
-.btn {
-  padding: 12px 24px;
-  border: none;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 700;
-  cursor: pointer;
+.dock-body::-webkit-scrollbar {
+  height: 3px;
+}
+
+.dock-body::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 2px;
+}
+
+.dock-section {
   display: flex;
   align-items: center;
-  gap: 10px;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  white-space: nowrap;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  gap: 8px;
+  flex-shrink: 0;
 }
 
-.btn:disabled {
+/* 左侧区域：已选统计与清空按钮 */
+.dock-left {
+  gap: 10px;
+}
+
+.selection-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  border-radius: var(--radius-full);
+}
+
+.badge-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-primary);
+  box-shadow: 0 0 6px var(--accent-primary);
+}
+
+.badge-text {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-primary);
+  white-space: nowrap;
+}
+
+.dock-btn-clear {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.dock-btn-clear:hover {
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--border-subtle);
+}
+
+/* 分割线 */
+.dock-divider {
+  width: 1px;
+  height: 22px;
+  background: rgba(255, 255, 255, 0.1);
+  flex-shrink: 0;
+}
+
+.dock-divider-mini {
+  width: 1px;
+  height: 16px;
+  background: rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+}
+
+/* 中间操作按钮组 */
+.dock-actions {
+  gap: 8px;
+}
+
+.dock-btn {
+  height: 34px;
+  padding: 0 13px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 600;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.dock-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
+/* 导出按钮 */
 .btn-export {
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-  color: white;
+  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(2, 132, 199, 0.3);
+  border: 1px solid rgba(56, 189, 248, 0.35);
 }
 
 .btn-export:hover:not(:disabled) {
-  transform: translateY(-3px);
-  box-shadow: 0 8px 20px rgba(16, 185, 129, 0.35);
+  background: linear-gradient(135deg, #0369a1 0%, #075985 100%);
+  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.5);
+  filter: brightness(1.08);
 }
 
-.btn-export:active:not(:disabled) {
-  transform: translateY(-1px);
-}
-
-.btn-upload {
-  background: rgba(139, 92, 246, 0.1);
-  border-color: rgba(139, 92, 246, 0.3);
-  color: #a78bfa;
-}
-
-.btn-upload:hover:not(:disabled) {
-  background: rgba(139, 92, 246, 0.2);
-  border-color: #8b5cf6;
-}
-
-.btn-delete {
-  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-  color: white;
-}
-
-.btn-disable {
-  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-  color: white;
-}
-
-.btn-enable {
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-  color: white;
-}
-
-.btn-delete:hover:not(:disabled),
-.btn-disable:hover:not(:disabled),
-.btn-enable:hover:not(:disabled) {
-  transform: translateY(-3px);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
-}
-
-.btn-delete:active:not(:disabled),
-.btn-disable:active:not(:disabled),
-.btn-enable:active:not(:disabled) {
-  transform: translateY(-1px);
-}
-
+/* 本地化按钮 */
 .btn-localize {
-  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
-  color: white;
+  background: rgba(139, 92, 246, 0.15);
+  color: #c4b5fd;
+  border: 1px solid rgba(139, 92, 246, 0.35);
 }
 
 .btn-localize:hover:not(:disabled) {
-  transform: translateY(-3px);
-  box-shadow: 0 8px 20px rgba(99, 102, 241, 0.35);
+  background: rgba(139, 92, 246, 0.25);
+  border-color: rgba(139, 92, 246, 0.55);
 }
 
-.btn-localize:active:not(:disabled) {
-  transform: translateY(-1px);
+/* 上传按钮 */
+.btn-upload {
+  background: rgba(6, 182, 212, 0.15);
+  color: #67e8f9;
+  border: 1px solid rgba(6, 182, 212, 0.35);
 }
 
-.btn-icon {
-  font-size: 18px;
+.btn-upload:hover:not(:disabled) {
+  background: rgba(6, 182, 212, 0.25);
+  border-color: rgba(6, 182, 212, 0.55);
 }
 
-.btn-spinner {
-  display: inline-block;
-  width: 16px;
-  height: 16px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  border-top-color: white;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
+/* 禁用按钮 */
+.btn-disable {
+  background: rgba(245, 158, 11, 0.12);
+  color: #fcd34d;
+  border: 1px solid rgba(245, 158, 11, 0.3);
 }
 
-.btn-loading {
-  opacity: 0.9;
+.btn-disable:hover:not(:disabled) {
+  background: rgba(245, 158, 11, 0.22);
+  border-color: rgba(245, 158, 11, 0.5);
 }
 
-.better-naming-checkbox {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  user-select: none;
-  font-size: 13px;
-  color: #cbd5e1;
-  border: 1px solid rgba(148, 163, 184, 0.1);
+/* 启用按钮 */
+.btn-enable {
+  background: rgba(16, 185, 129, 0.12);
+  color: #6ee7b7;
+  border: 1px solid rgba(16, 185, 129, 0.3);
 }
 
-.better-naming-checkbox:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(148, 163, 184, 0.2);
+.btn-enable:hover:not(:disabled) {
+  background: rgba(16, 185, 129, 0.22);
+  border-color: rgba(16, 185, 129, 0.5);
 }
 
-.better-naming-checkbox input {
-  width: 16px;
-  height: 16px;
-  cursor: pointer;
+/* 删除按钮 */
+.btn-delete {
+  background: rgba(244, 63, 94, 0.12);
+  color: #fda4af;
+  border: 1px solid rgba(244, 63, 94, 0.3);
 }
 
-.checkbox-help {
-  opacity: 0.6;
-  font-size: 12px;
+.btn-delete:hover:not(:disabled) {
+  background: rgba(244, 63, 94, 0.22);
+  border-color: rgba(244, 63, 94, 0.5);
 }
 
-/* 原 App.vue 中 .selection-info 定义了两次,此处合并为一条(取后者覆盖后的最终样式) */
-.selection-info {
-  font-size: 13px;
-  color: #cbd5e1;
-  font-weight: 500;
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: rgba(255, 255, 255, 0.05);
-  padding: 0 12px;
-  border-radius: 20px;
-}
-
-.export-progress {
-  display: flex;
-  align-items: center;
+/* 右侧选项区域：保证单行不换行 */
+.dock-right {
   gap: 12px;
 }
 
-.progress-bar {
-  flex: 1;
-  height: 6px;
-  background: rgba(148, 163, 184, 0.15);
-  border-radius: 3px;
-  overflow: hidden;
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
-}
-
-.progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #3b82f6 0%, #8b5cf6 100%);
-  animation: progress 1.5s ease-in-out infinite;
-  border-radius: 3px;
-}
-
-.progress-text {
-  font-size: 13px;
-  color: #94a3b8;
+.dock-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
   white-space: nowrap;
+  flex-shrink: 0;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  transition: background var(--transition-fast);
+}
+
+.dock-checkbox:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.dock-checkbox input {
+  accent-color: var(--accent-primary);
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.option-label {
+  font-size: 12px;
   font-weight: 500;
+  color: var(--text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
-/* Animations */
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
+.help-icon {
+  color: var(--text-dim);
+  flex-shrink: 0;
 }
 
-@keyframes progress {
-  0%, 100% {
-    opacity: 0.6;
-  }
-  50% {
-    opacity: 1;
-  }
+/* 停靠位置切换按钮 */
+.dock-pos-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
-/* Responsive */
-@media (max-width: 768px) {
-  .action-buttons {
-    flex-direction: column;
-    width: 100%;
-  }
+.dock-pos-toggle:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-main);
+  border-color: var(--border-medium);
+}
 
-  .btn {
-    width: 100%;
-    justify-content: center;
-  }
-
-  .selection-info {
-    width: 100%;
-    justify-content: center;
-  }
+.toggle-text {
+  white-space: nowrap;
 }
 </style>

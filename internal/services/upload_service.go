@@ -10,14 +10,20 @@ import (
 )
 
 type UploadService struct {
-	metaService *VpkMetadataService
-	sftpService *SftpService
+	metaService  *VpkMetadataService
+	sftpService  *SftpService
+	notesService *NotesService
 }
 
-func NewUploadService(meta *VpkMetadataService, sftp *SftpService) *UploadService {
+func NewUploadService(meta *VpkMetadataService, sftp *SftpService, notes ...*NotesService) *UploadService {
+	var n *NotesService
+	if len(notes) > 0 {
+		n = notes[0]
+	}
 	return &UploadService{
-		metaService: meta,
-		sftpService: sftp,
+		metaService:  meta,
+		sftpService:  sftp,
+		notesService: n,
 	}
 }
 
@@ -71,7 +77,11 @@ func (s *UploadService) resolveBaseName(localPath string, betterNaming bool) str
 	if title != nil {
 		titleStr = *title
 	}
-	return naming.BuildExportBaseName(titleStr, name, fallback)
+	var note string
+	if s.notesService != nil {
+		note = s.notesService.GetNote(localPath)
+	}
+	return naming.BuildExportBaseNameWithNote(titleStr, name, fallback, note)
 }
 
 func (s *UploadService) uploadAssociatedImages(localPath, baseName, remoteAddonsPath string, config models.SftpSettings) {

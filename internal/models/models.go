@@ -1,16 +1,24 @@
 package models
 
+// MapInfo represents a Left 4 Dead 2 map / chapter inside a VPK
+type MapInfo struct {
+	Name        string `json:"name"`                  // e.g. "c1m1_hotel"
+	DisplayName string `json:"display_name,omitempty"` // e.g. "Hotel" / "旅馆"
+}
+
 // VpkFile represents metadata for a local or workshop VPK file
 type VpkFile struct {
-	Name          string  `json:"name"`
-	Path          string  `json:"path"`
-	Size          int64   `json:"size"`
-	ModifiedTime  float64 `json:"modified_time"`
-	IsValid       bool    `json:"is_valid"`
-	IsDisabled    bool    `json:"is_disabled"`
-	ThumbnailPath *string `json:"thumbnail_path,omitempty"`
-	AddonTitle    *string `json:"addontitle,omitempty"`
-	DisplayName   string  `json:"display_name"`
+	Name          string    `json:"name"`
+	Path          string    `json:"path"`
+	Size          int64     `json:"size"`
+	ModifiedTime  float64   `json:"modified_time"`
+	IsValid       bool      `json:"is_valid"`
+	IsDisabled    bool      `json:"is_disabled"`
+	ThumbnailPath *string   `json:"thumbnail_path,omitempty"`
+	AddonTitle    *string   `json:"addontitle,omitempty"`
+	DisplayName   string    `json:"display_name"`
+	Note          string    `json:"note,omitempty"`
+	Maps          []MapInfo `json:"maps,omitempty"`
 }
 
 // ApiResult is the standard response structure

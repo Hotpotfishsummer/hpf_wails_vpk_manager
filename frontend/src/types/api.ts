@@ -1,4 +1,5 @@
-import type { VpkFile } from '@/stores/vpk-manager'
+import type { VpkFile, MapInfo } from '@/stores/vpk-manager'
+export type { MapInfo, VpkFile }
 
 /**
  * 后端 API 返回结果的类型定义。

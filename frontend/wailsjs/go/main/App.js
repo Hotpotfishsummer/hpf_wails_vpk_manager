@@ -34,6 +34,10 @@ export function ExportVpks(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['ExportVpks'](arg1, arg2, arg3, arg4);
 }
 
+export function GetAllVpkNotes() {
+  return window['go']['main']['App']['GetAllVpkNotes']();
+}
+
 export function GetDownloadsDirectory() {
   return window['go']['main']['App']['GetDownloadsDirectory']();
 }
@@ -44,6 +48,10 @@ export function GetLastDirectory() {
 
 export function GetSftpSettings() {
   return window['go']['main']['App']['GetSftpSettings']();
+}
+
+export function GetVpkNote(arg1) {
+  return window['go']['main']['App']['GetVpkNote'](arg1);
 }
 
 export function ImportCompressedVpks() {
@@ -88,6 +96,10 @@ export function SaveSftpSettings(arg1) {
 
 export function ScanVpkFiles(arg1) {
   return window['go']['main']['App']['ScanVpkFiles'](arg1);
+}
+
+export function SetVpkNote(arg1, arg2) {
+  return window['go']['main']['App']['SetVpkNote'](arg1, arg2);
 }
 
 export function UploadLocalVpks(arg1, arg2) {
