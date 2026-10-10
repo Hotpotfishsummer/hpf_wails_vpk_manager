@@ -1,0 +1,20 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "L4D2-VPK-Manager",
+  "outputfilename": "L4D2-VPK-Manager",
+  "frontend:install": "npm install",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "author": {
+    "name": "hpf",
+    "email": "1136296339@qq.com"
+  },
+  "info": {
+    "companyName": "hpf",
+    "productName": "L4D2 VPK Manager",
+    "productVersion": "1.0.0",
+    "copyright": "Copyright © 2026",
+    "comments": "L4D2 VPK Manager built with Go + Wails + Vue3"
+  }
+}
