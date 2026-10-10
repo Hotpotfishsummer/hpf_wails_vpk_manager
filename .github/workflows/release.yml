@@ -1,0 +1,135 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release Tag (e.g. v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+        type: string
+      draft:
+        description: 'Publish as draft'
+        required: false
+        default: false
+        type: boolean
+      prerelease:
+        description: 'Publish as pre-release'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & Release (Windows)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          cache: false # 明确禁用 Actions 缓存，避免占用 Actions 存储配额
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: false # 明确禁用 Actions 缓存
+
+      - name: Install Wails CLI
+        shell: pwsh
+        run: |
+          go install github.com/wailsapp/wails/v2/cmd/wails@v2.16.0
+          $gopath = go env GOPATH
+          "$gopath\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Install Frontend Dependencies
+        shell: pwsh
+        working-directory: frontend
+        run: |
+          npm ci
+
+      - name: Build Application with Wails
+        shell: pwsh
+        run: |
+          wails build -clean -trimpath
+
+      - name: Prepare Release Packages
+        id: pkg
+        shell: pwsh
+        run: |
+          $exePath = "build\bin\L4D2-VPK-Manager.exe"
+          if (-not (Test-Path $exePath)) {
+            Write-Error "Build output not found at $exePath"
+            exit 1
+          }
+
+          # 确定版本号
+          $tag = "${{ github.ref_name }}"
+          if ("${{ github.event_name }}" -eq "workflow_dispatch" -and "${{ inputs.tag_name }}") {
+            $tag = "${{ inputs.tag_name }}"
+          }
+          if (-not $tag) {
+            $tag = "v1.0.0"
+          }
+
+          $zipName = "L4D2-VPK-Manager-$tag-windows-amd64.zip"
+          Compress-Archive -Path $exePath -DestinationPath $zipName -Force
+
+          # 生成 SHA256 校验码
+          $hash = (Get-FileHash -Path $zipName -Algorithm SHA256).Hash
+          "$hash  $zipName" | Out-File -FilePath "$zipName.sha256" -Encoding utf8
+
+          "TAG_NAME=$tag" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "ZIP_NAME=$zipName" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "Prepared $zipName with SHA256 $hash"
+
+      - name: Publish to GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = $env:TAG_NAME
+          $zipFile = $env:ZIP_NAME
+          $shaFile = "$zipFile.sha256"
+          $exeFile = "build\bin\L4D2-VPK-Manager.exe"
+
+          $flags = @()
+          if ("${{ inputs.draft }}" -eq "true") { $flags += "--draft" }
+          if ("${{ inputs.prerelease }}" -eq "true") { $flags += "--prerelease" }
+
+          # 检查该 tag 的 Release 是否已存在
+          $existing = gh release view $tag 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "Release $tag already exists. Uploading/updating assets..."
+            gh release upload $tag $zipFile $shaFile $exeFile --clobber
+          } else {
+            Write-Host "Creating new Release $tag..."
+            gh release create $tag $zipFile $shaFile $exeFile `
+              --title "L4D2 VPK Manager $tag" `
+              --generate-notes `
+              @flags
+          }
+
+      # 注意：本工作流不调用 actions/upload-artifact，
+      # 所有安装包直接挂载至 GitHub Releases，不会占用 GitHub Actions 的计费 Artifact 存储空间。
+      # 下面步骤进一步在 Runner 本地彻底清理构建临时文件。
+      - name: Cleanup Runner Workspace
+        if: always()
+        shell: pwsh
+        run: |
+          Write-Host "Cleaning runner build files..."
+          Remove-Item -Force -Recurse -ErrorAction SilentlyContinue build, *.zip, *.sha256
+          Write-Host "Runner cleanup complete. 0 Actions artifacts retained."
