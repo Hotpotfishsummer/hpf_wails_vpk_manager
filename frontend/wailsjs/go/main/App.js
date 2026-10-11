@@ -10,6 +10,10 @@ export function BrowseDirectory() {
   return window['go']['main']['App']['BrowseDirectory']();
 }
 
+export function CancelUpload() {
+  return window['go']['main']['App']['CancelUpload']();
+}
+
 export function DeleteMultipleRemoteVpks(arg1) {
   return window['go']['main']['App']['DeleteMultipleRemoteVpks'](arg1);
 }

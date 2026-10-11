@@ -1,7 +1,13 @@
 <template>
   <div :class="['action-bar-docked', `dock-${props.position}`]">
     <!-- 忙碌进度条 (若处于顶部停靠则置于下边缘，若处于底部停靠则置于上边缘) -->
-    <div v-if="isAnyBusy && props.position === 'bottom'" class="dock-progress-bar">
+    <div
+      v-if="isAnyBusy && props.position === 'bottom'"
+      class="dock-progress-bar"
+      :class="{ 'is-clickable': store.isUploading }"
+      @click="handleProgressBarClick"
+      :title="store.isUploading ? $t('uploadProgressTitle') : ''"
+    >
       <div class="dock-progress-fill" :style="{ width: progressWidth }"></div>
       <span class="dock-progress-text">{{ busyText }}</span>
     </div>
@@ -154,7 +160,13 @@
     </div>
 
     <!-- 忙碌进度条 (顶部停靠时置于下边缘) -->
-    <div v-if="isAnyBusy && props.position === 'top'" class="dock-progress-bar">
+    <div
+      v-if="isAnyBusy && props.position === 'top'"
+      class="dock-progress-bar"
+      :class="{ 'is-clickable': store.isUploading }"
+      @click="handleProgressBarClick"
+      :title="store.isUploading ? $t('uploadProgressTitle') : ''"
+    >
       <div class="dock-progress-fill" :style="{ width: progressWidth }"></div>
       <span class="dock-progress-text">{{ busyText }}</span>
     </div>
@@ -210,7 +222,16 @@ const busyText = computed(() => {
     if (stage === 'copying' && total > 0) return `${$t('packingFiles')} (${done}/${total})`
     return $t('packingFiles')
   }
-  if (store.isUploading) return $t('uploadingLocal')
+  if (store.isUploading) {
+    const p = store.uploadProgress
+    if (p.totalFiles > 0) {
+      const pct = p.overallTotal > 0 ? Math.round((p.overallBytes / p.overallTotal) * 100) : 0
+      const speedStr = p.speed > 0 ? ` • ${formatSpeed(p.speed)}` : ''
+      const filePart = p.currentFile ? `: ${p.currentFile}` : ''
+      return `${$t('uploading')} (${p.currentIndex}/${p.totalFiles}) ${pct}%${filePart}${speedStr}`
+    }
+    return $t('uploadingLocal')
+  }
   if (store.isDownloading) return $t('downloadingRemote')
   if (store.isImporting) return $t('importing')
   if (store.isLocalizing) return $t('converting')
@@ -223,8 +244,31 @@ const progressWidth = computed(() => {
     const pct = Math.round((store.exportProgress.done / store.exportProgress.total) * 100)
     return `${pct}%`
   }
+  if (store.isUploading && store.uploadProgress.overallTotal > 0) {
+    const pct = Math.round((store.uploadProgress.overallBytes / store.uploadProgress.overallTotal) * 100)
+    return `${Math.min(100, Math.max(0, pct))}%`
+  }
   return '100%'
 })
+
+function formatSpeed(bytesPerSec: number): string {
+  if (!bytesPerSec || bytesPerSec <= 0) return '0 KB/s'
+  const units = ['B/s', 'KB/s', 'MB/s', 'GB/s']
+  let idx = 0
+  let val = bytesPerSec
+  while (val >= 1024 && idx < units.length - 1) {
+    val /= 1024
+    idx++
+  }
+  return `${val.toFixed(val >= 100 || idx === 0 ? 0 : 1)} ${units[idx]}`
+}
+
+function handleProgressBarClick() {
+  if (store.isUploading) {
+    store.uploadProgress.visible = true
+    store.uploadProgress.collapsed = false
+  }
+}
 
 function handleClearSelection() {
   store.clearSelection()
@@ -342,6 +386,15 @@ function handleRemoveFromGroup() {
   display: flex;
   align-items: center;
   overflow: hidden;
+}
+
+.dock-progress-bar.is-clickable {
+  cursor: pointer;
+}
+
+.dock-progress-bar.is-clickable:hover .dock-progress-text {
+  text-decoration: underline;
+  color: #38bdf8;
 }
 
 .dock-progress-fill {

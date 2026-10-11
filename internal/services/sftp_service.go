@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"math"
@@ -238,7 +239,28 @@ func (s *SftpService) DownloadFile(config models.SftpSettings, remotePath, local
 	return err
 }
 
+type FileProgressCallback func(transferred int64, total int64)
+
 func (s *SftpService) UploadFile(config models.SftpSettings, localPath, remotePath string) error {
+	return s.UploadFileWithProgress(context.Background(), config, localPath, remotePath, nil)
+}
+
+func (s *SftpService) UploadFileWithProgress(
+	ctx context.Context,
+	config models.SftpSettings,
+	localPath, remotePath string,
+	onProgress FileProgressCallback,
+) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
 	client, err := s.getClient(config)
 	if err != nil {
 		return err
@@ -250,12 +272,81 @@ func (s *SftpService) UploadFile(config models.SftpSettings, localPath, remotePa
 	}
 	defer srcFile.Close()
 
+	stat, err := srcFile.Stat()
+	if err != nil {
+		return err
+	}
+	totalSize := stat.Size()
+
+	remoteDir := path.Dir(remotePath)
+	if remoteDir != "" && remoteDir != "." && remoteDir != "/" {
+		_ = client.MkdirAll(remoteDir)
+	}
+
 	dstFile, err := client.Create(remotePath)
 	if err != nil {
 		return err
 	}
-	defer dstFile.Close()
 
-	_, err = io.Copy(dstFile, srcFile)
-	return err
+	var completed bool
+	defer func() {
+		_ = dstFile.Close()
+		if !completed && ctx.Err() != nil {
+			_ = client.Remove(remotePath)
+		}
+	}()
+
+	buf := make([]byte, 128*1024)
+	var transferred int64 = 0
+	lastReportTime := time.Now()
+
+	if onProgress != nil {
+		onProgress(0, totalSize)
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		nr, er := srcFile.Read(buf)
+		if nr > 0 {
+			nw, ew := dstFile.Write(buf[0:nr])
+			if nw < 0 || nr < nw {
+				nw = 0
+				if ew == nil {
+					ew = io.ErrShortWrite
+				}
+			}
+			transferred += int64(nw)
+			if ew != nil {
+				return ew
+			}
+			if nr != nw {
+				return io.ErrShortWrite
+			}
+
+			now := time.Now()
+			if onProgress != nil && (now.Sub(lastReportTime) >= 100*time.Millisecond || transferred == totalSize) {
+				onProgress(transferred, totalSize)
+				lastReportTime = now
+			}
+		}
+
+		if er != nil {
+			if er != io.EOF {
+				return er
+			}
+			break
+		}
+	}
+
+	if onProgress != nil && transferred != totalSize {
+		onProgress(totalSize, totalSize)
+	}
+
+	completed = true
+	return nil
 }

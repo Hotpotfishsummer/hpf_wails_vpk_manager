@@ -85,10 +85,34 @@ type DownloadResult struct {
 	DownloadedCount int `json:"downloaded_count"`
 }
 
-// UploadResult contains upload count
+// UploadFailedItem represents a file that failed to upload and its error reason
+type UploadFailedItem struct {
+	File  string `json:"file"`
+	Error string `json:"error"`
+}
+
+// UploadResult contains upload count, total count, failed files, and cancel status
 type UploadResult struct {
 	ApiResult
-	UploadedCount int `json:"uploaded_count"`
+	UploadedCount int                `json:"uploaded_count"`
+	TotalCount    int                `json:"total_count"`
+	FailedFiles   []UploadFailedItem `json:"failed_files,omitempty"`
+	Canceled      bool               `json:"canceled,omitempty"`
+}
+
+// UploadProgressEvent represents real-time progress of SFTP upload
+type UploadProgressEvent struct {
+	CurrentIndex int    `json:"current_index"` // 当前文件序号 (从 1 开始)
+	TotalFiles   int    `json:"total_files"`   // 总选中的 VPK 文件数
+	CurrentFile  string `json:"current_file"`  // 当前正在上传的文件名
+	CurrentBytes int64  `json:"current_bytes"` // 当前文件已上传字节
+	TotalBytes   int64  `json:"total_bytes"`   // 当前文件总字节
+	OverallBytes int64  `json:"overall_bytes"` // 所有文件累计已上传字节
+	OverallTotal int64  `json:"overall_total"` // 所有文件累计总字节
+	Speed        int64  `json:"speed"`         // 当前上传速度 (字节/秒)
+	SuccessCount int    `json:"success_count"` // 已成功上传的文件数
+	FailedCount  int    `json:"failed_count"`  // 已失败的文件数
+	Stage        string `json:"stage"`         // "preparing" | "uploading" | "completed" | "error" | "canceled"
 }
 
 // RestartResult contains L4D2 server restart status

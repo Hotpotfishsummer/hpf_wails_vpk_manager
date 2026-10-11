@@ -57,6 +57,12 @@ waitForApi().then(() => {
     exportProgress.total = payload.total
   }
 
+  // 上传进度回调
+  ;(window as any).__onUploadProgress = (payload: any) => {
+    const store = useVpkManagerStore()
+    store.handleUploadProgress(payload)
+  }
+
   app.use(createPinia())
   app.use(i18n)
 

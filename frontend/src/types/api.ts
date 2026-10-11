@@ -65,8 +65,30 @@ export interface DownloadResult extends ApiResult {
 }
 
 /** upload_local_vpks */
+export interface UploadFailedItem {
+  file: string
+  error: string
+}
+
+export interface UploadProgressEvent {
+  current_index: number
+  total_files: number
+  current_file: string
+  current_bytes: number
+  total_bytes: number
+  overall_bytes: number
+  overall_total: number
+  speed: number
+  success_count: number
+  failed_count: number
+  stage: 'preparing' | 'uploading' | 'completed' | 'error' | 'canceled'
+}
+
 export interface UploadResult extends ApiResult {
   uploaded_count?: number
+  total_count?: number
+  failed_files?: UploadFailedItem[]
+  canceled?: boolean
 }
 
 /** 自动探测到的 L4D2 客户端 */

@@ -6,6 +6,8 @@ export function AiChat(arg1:models.AiChatRequest):Promise<models.AiResult>;
 
 export function BrowseDirectory():Promise<string>;
 
+export function CancelUpload():Promise<boolean>;
+
 export function DeleteMultipleRemoteVpks(arg1:Array<string>):Promise<models.BatchDeleteResult>;
 
 export function DeleteMultipleVpkFiles(arg1:Array<string>,arg2:boolean):Promise<models.BatchDeleteResult>;

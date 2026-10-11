@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 
@@ -19,6 +20,8 @@ import (
 // App struct
 type App struct {
 	ctx              context.Context
+	uploadCancelMu   sync.Mutex
+	uploadCancel     context.CancelFunc
 	storageService   *services.StorageService
 	configService    *services.ConfigService
 	notesService     *services.NotesService
@@ -484,13 +487,40 @@ func (a *App) DownloadRemoteVpks(remoteFilePaths []string) models.DownloadResult
 
 // UploadLocalVpks uploads local VPKs to remote SFTP server
 func (a *App) UploadLocalVpks(localFilePaths []string, betterNaming bool) models.UploadResult {
+	a.uploadCancelMu.Lock()
+	ctx, cancel := context.WithCancel(a.ctx)
+	a.uploadCancel = cancel
+	a.uploadCancelMu.Unlock()
+
+	defer func() {
+		a.uploadCancelMu.Lock()
+		a.uploadCancel = nil
+		a.uploadCancelMu.Unlock()
+	}()
+
 	cfg := a.storageService.GetSftpSettings()
 	if cfg.AddonsPath == "" {
 		return models.UploadResult{
 			ApiResult: models.ApiResult{Success: false, Error: "未配置远程 addons 路径"},
 		}
 	}
-	return a.uploadService.Upload(localFilePaths, cfg.AddonsPath, cfg, betterNaming)
+
+	progressCb := func(evt models.UploadProgressEvent) {
+		wailsRuntime.EventsEmit(a.ctx, "upload-progress", evt)
+	}
+
+	return a.uploadService.Upload(ctx, localFilePaths, cfg.AddonsPath, cfg, betterNaming, progressCb)
+}
+
+// CancelUpload cancels an ongoing SFTP upload
+func (a *App) CancelUpload() bool {
+	a.uploadCancelMu.Lock()
+	defer a.uploadCancelMu.Unlock()
+	if a.uploadCancel != nil {
+		a.uploadCancel()
+		return true
+	}
+	return false
 }
 
 // OpenExternalUrl opens a URL in system default browser

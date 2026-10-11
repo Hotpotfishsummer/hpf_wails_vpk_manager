@@ -2,9 +2,9 @@ import { defineStore } from 'pinia'
 import { ref, reactive, computed } from 'vue'
 import i18n from '@/i18n'
 import { getApi, callApi } from '@/composables/useApi'
-import type { RemoteFile, DetectedGameClient, LaunchSettings, VpkGroup, AiSettings, GroupPredictResult } from '@/types/api'
+import type { RemoteFile, DetectedGameClient, LaunchSettings, VpkGroup, AiSettings, GroupPredictResult, UploadProgressEvent } from '@/types/api'
 
-export type { DetectedGameClient, LaunchSettings, VpkGroup, AiSettings, GroupPredictResult }
+export type { DetectedGameClient, LaunchSettings, VpkGroup, AiSettings, GroupPredictResult, UploadProgressEvent }
 
 // 组件外使用 vue-i18n 的全局实例,保证通知文案跟随当前语言
 const $t = i18n.global.t
@@ -199,6 +199,25 @@ export const useVpkManagerStore = defineStore('vpkManager', () => {
   const useBetterNaming = ref(true) // 默认开启
   const useAutoOpenExport = ref(true) // 默认开启
   const exportProgress = reactive({ stage: '', done: 0, total: 0 })
+
+  // 上传实时进度监控状态
+  const uploadProgress = reactive({
+    visible: false,
+    collapsed: false,
+    stage: 'idle' as 'idle' | 'preparing' | 'uploading' | 'completed' | 'error' | 'canceled',
+    currentIndex: 0,
+    totalFiles: 0,
+    currentFile: '',
+    currentBytes: 0,
+    totalBytes: 0,
+    overallBytes: 0,
+    overallTotal: 0,
+    speed: 0,
+    successCount: 0,
+    failedCount: 0,
+    failedFiles: [] as Array<{ file: string; error: string }>,
+    isCanceled: false,
+  })
 
   // SFTP 设置
   const sftpSettings = reactive({
@@ -992,29 +1011,97 @@ async function downloadRemoteVpks() {
     }
   }
 
-    /** 上传选中的本地 VPK 及关联图片到远端 addons */
-async function uploadLocalVpks() {
+  function handleUploadProgress(payload: UploadProgressEvent) {
+    if (!uploadProgress.visible) {
+      uploadProgress.visible = true
+    }
+    uploadProgress.stage = payload.stage
+    uploadProgress.currentIndex = payload.current_index
+    uploadProgress.totalFiles = payload.total_files
+    uploadProgress.currentFile = payload.current_file
+    uploadProgress.currentBytes = payload.current_bytes
+    uploadProgress.totalBytes = payload.total_bytes
+    uploadProgress.overallBytes = payload.overall_bytes
+    uploadProgress.overallTotal = payload.overall_total
+    uploadProgress.speed = payload.speed
+    uploadProgress.successCount = payload.success_count
+    uploadProgress.failedCount = payload.failed_count
+    if (payload.stage === 'canceled') {
+      uploadProgress.isCanceled = true
+    }
+  }
+
+  async function cancelUpload() {
+    if (!isUploading.value) return
+    uploadProgress.isCanceled = true
+    try {
+      await getApi().cancel_upload()
+    } catch (error) {
+      console.error('Cancel upload error:', error)
+    }
+  }
+
+  function closeUploadProgress() {
+    uploadProgress.visible = false
+  }
+
+  function toggleUploadProgressCollapsed() {
+    uploadProgress.collapsed = !uploadProgress.collapsed
+  }
+
+  /** 上传选中的本地 VPK 及关联图片到远端 addons */
+  async function uploadLocalVpks() {
     const paths = getSelectedVpkPaths()
     if (paths.length === 0) return
-    
+
+    uploadProgress.visible = true
+    uploadProgress.collapsed = false
+    uploadProgress.stage = 'preparing'
+    uploadProgress.currentIndex = 0
+    uploadProgress.totalFiles = paths.length
+    uploadProgress.currentFile = ''
+    uploadProgress.currentBytes = 0
+    uploadProgress.totalBytes = 0
+    uploadProgress.overallBytes = 0
+    uploadProgress.overallTotal = 0
+    uploadProgress.speed = 0
+    uploadProgress.successCount = 0
+    uploadProgress.failedCount = 0
+    uploadProgress.failedFiles = []
+    uploadProgress.isCanceled = false
+
     isUploading.value = true
-    showNotification($t('uploadingLocal'), 'info')
     try {
       const result = await getApi().upload_local_vpks(
-        paths, 
+        paths,
         useBetterNaming.value
       )
-      if (result.success) {
-        showNotification($t('uploadSuccess', { count: result.uploaded_count }), 'success')
+      if (result.canceled) {
+        uploadProgress.stage = 'canceled'
+        uploadProgress.isCanceled = true
+        showNotification($t('uploadCanceled'), 'info')
+      } else if (result.success) {
+        uploadProgress.stage = 'completed'
+        if (result.failed_files && result.failed_files.length > 0) {
+          uploadProgress.failedFiles = result.failed_files
+          showNotification($t('uploadSummary', { success: result.uploaded_count ?? 0, failed: result.failed_files.length }), 'warning')
+        } else {
+          showNotification($t('uploadSuccess', { count: result.uploaded_count ?? 0 }), 'success')
+        }
         // 刷新远程列表
         if (isSftpActive.value) {
           await scanRemoteVpks()
         }
       } else {
+        uploadProgress.stage = 'error'
+        if (result.failed_files && result.failed_files.length > 0) {
+          uploadProgress.failedFiles = result.failed_files
+        }
         showNotification(result.error || $t('uploadFailed'), 'error')
       }
-    } catch (error) {
-      showNotification($t('uploadError', { error }), 'error')
+    } catch (error: any) {
+      uploadProgress.stage = 'error'
+      showNotification($t('uploadError', { error: String(error) }), 'error')
     } finally {
       isUploading.value = false
     }
@@ -1232,6 +1319,11 @@ async function uploadLocalVpks() {
     enableRemoteVpks,
     downloadRemoteVpks,
     uploadLocalVpks,
+    uploadProgress,
+    handleUploadProgress,
+    cancelUpload,
+    closeUploadProgress,
+    toggleUploadProgressCollapsed,
     restartL4d2Server,
     initialize,
     openAddonsFolder,

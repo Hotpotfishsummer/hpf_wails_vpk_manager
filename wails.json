@@ -13,7 +13,7 @@
   "info": {
     "companyName": "hpf",
     "productName": "L4D2 VPK Manager",
-    "productVersion": "1.0.0",
+    "productVersion": "1.1.0",
     "copyright": "Copyright © 2026",
     "comments": "L4D2 VPK Manager built with Go + Wails + Vue3"
   }

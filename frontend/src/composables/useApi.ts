@@ -21,11 +21,16 @@ import type {
   VpkFile,
 } from '@/types/api'
 
-// 监听 Wails 后端推送的导出进度事件
+// 监听 Wails 后端推送的导出进度与上传进度事件
 try {
   EventsOn('export-progress', (data: any) => {
     if (typeof (window as any).__onExportProgress === 'function') {
       ;(window as any).__onExportProgress(data)
+    }
+  })
+  EventsOn('upload-progress', (data: any) => {
+    if (typeof (window as any).__onUploadProgress === 'function') {
+      ;(window as any).__onUploadProgress(data)
     }
   })
 } catch {
@@ -68,6 +73,7 @@ const wailsAdapter = {
     AppApi.DownloadRemoteVpks(remote_file_paths) as Promise<DownloadResult>,
   upload_local_vpks: (local_file_paths: string[], better_naming = false) =>
     AppApi.UploadLocalVpks(local_file_paths, better_naming) as Promise<UploadResult>,
+  cancel_upload: () => AppApi.CancelUpload() as Promise<boolean>,
   open_external_url: (url: string) => AppApi.OpenExternalUrl(url),
   restart_l4d2_server: () => AppApi.RestartL4d2Server() as Promise<ApiResult & { duration_s?: number }>,
   set_vpk_note: (file_path: string, note: string) => AppApi.SetVpkNote(file_path, note) as Promise<ApiResult>,
@@ -104,6 +110,7 @@ declare global {
       api: PyWebViewApi
     }
     __onExportProgress?: (payload: { stage: string; done: number; total: number }) => void
+    __onUploadProgress?: (payload: any) => void
   }
 }
 

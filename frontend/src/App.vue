@@ -128,6 +128,9 @@
         position="bottom"
       />
     </transition>
+
+    <!-- 全局文件上传进度悬浮卡片 -->
+    <UploadProgressModal />
   </div>
 </template>
 
@@ -148,6 +151,7 @@ import GuideModal from '@/components/GuideModal.vue'
 import GroupActionModal from '@/components/GroupActionModal.vue'
 import SftpBrowser from '@/components/SftpBrowser.vue'
 import DropOverlay from '@/components/DropOverlay.vue'
+import UploadProgressModal from '@/components/UploadProgressModal.vue'
 import SvgIcon from '@/components/common/SvgIcon.vue'
 import { OnFileDrop, OnFileDropOff } from '../wailsjs/runtime/runtime'
 
