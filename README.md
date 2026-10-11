@@ -91,6 +91,13 @@ wails build -clean
 go test -v ./...
 ```
 
+### 4. 自动化版本发布 (GitHub Actions CI/CD)
+
+项目已配置全自动 Release 工作流：
+* **检测版本号自动发布**：只要修改 `wails.json`（或 `frontend/package.json`）中的版本号（如 `1.0.0` -> `1.0.1`）并推送到 `main` 分支，GitHub Actions 会自动检测版本变更、启动 Windows 构建打包并创建附带 `.zip` 与 `.sha256` 的全新 GitHub Release。
+* **手动触发发布**：亦可在 GitHub 仓库的 **Actions -> Build and Release** 页面点击「Run workflow」手动触发。
+* **Tag 推送发布**：直接推送 Git Tag（如 `git tag v1.0.1 && git push origin v1.0.1`）同样会自动构建并发布。
+
 ---
 
 ## 📄 配置文件说明

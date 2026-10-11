@@ -2,14 +2,19 @@ name: Build and Release
 
 on:
   push:
+    branches:
+      - main
+    paths:
+      - 'wails.json'
+      - 'frontend/package.json'
     tags:
       - 'v*'
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Release Tag (e.g. v1.0.0)'
-        required: true
-        default: 'v1.0.0'
+        description: 'Release Tag (leave empty to use version from wails.json)'
+        required: false
+        default: ''
         type: string
       draft:
         description: 'Publish as draft'
@@ -26,8 +31,122 @@ permissions:
   contents: write
 
 jobs:
+  check-version:
+    name: Check Version & Trigger Condition
+    runs-on: ubuntu-latest
+    outputs:
+      should_release: ${{ steps.check.outputs.should_release }}
+      tag_name: ${{ steps.check.outputs.tag_name }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine Target Version and Release Trigger
+        id: check
+        shell: pwsh
+        run: |
+          # 1. 尝试从 wails.json 或 frontend/package.json 获取当前版本号
+          $currVer = ""
+          if (Test-Path "wails.json") {
+            try {
+              $currVer = (Get-Content "wails.json" -Raw | ConvertFrom-Json).info.productVersion
+            } catch {}
+          }
+          if (-not $currVer -and (Test-Path "frontend/package.json")) {
+            try {
+              $currVer = (Get-Content "frontend/package.json" -Raw | ConvertFrom-Json).version
+            } catch {}
+          }
+
+          if ($currVer) {
+            $currVer = $currVer.Trim().TrimStart('v')
+          }
+          Write-Host "Current codebase version: $currVer"
+
+          $eventName = "${{ github.event_name }}"
+          $shouldRelease = "false"
+          $targetTag = ""
+
+          if ($eventName -eq "workflow_dispatch") {
+            # 手动触发模式
+            $inputTag = "${{ inputs.tag_name }}".Trim()
+            if ($inputTag) {
+              $targetTag = if ($inputTag.StartsWith('v')) { $inputTag } else { "v$inputTag" }
+            } elseif ($currVer) {
+              $targetTag = "v$currVer"
+            } else {
+              $targetTag = "v1.0.0"
+            }
+            $shouldRelease = "true"
+            Write-Host "Workflow dispatched manually with target tag: $targetTag"
+          } elseif ($eventName -eq "push" -and "${{ github.ref_type }}" -eq "tag") {
+            # Git Tag 推送触发
+            $targetTag = "${{ github.ref_name }}"
+            $shouldRelease = "true"
+            Write-Host "Triggered by git tag push: $targetTag"
+          } else {
+            # Push 到 main 分支触发
+            if (-not $currVer) {
+              Write-Host "::warning::No version found in wails.json or package.json. Skipping release."
+              $shouldRelease = "false"
+            } else {
+              $targetTag = "v$currVer"
+
+              # 获取变更前提交中的版本号
+              $prevVer = ""
+              $beforeSha = "${{ github.event.before }}"
+              if ($beforeSha -and $beforeSha -ne "0000000000000000000000000000000000000000") {
+                try {
+                  $prevWails = git show "$($beforeSha):wails.json" 2>$null
+                  if ($prevWails) {
+                    $prevVer = ($prevWails | ConvertFrom-Json).info.productVersion
+                  }
+                } catch {}
+                if (-not $prevVer) {
+                  try {
+                    $prevPkg = git show "$($beforeSha):frontend/package.json" 2>$null
+                    if ($prevPkg) {
+                      $prevVer = ($prevPkg | ConvertFrom-Json).version
+                    }
+                  } catch {}
+                }
+              }
+              if ($prevVer) {
+                $prevVer = $prevVer.Trim().TrimStart('v')
+              }
+              Write-Host "Previous commit version: $prevVer"
+
+              # 检查该 tag 是否已存在
+              git fetch --tags origin 2>$null
+              $tagExists = $(git tag -l $targetTag)
+
+              if ($currVer -ne $prevVer) {
+                if ($tagExists) {
+                  Write-Host "::warning::Version changed to $currVer, but tag $targetTag already exists! Skipping to prevent overwrite."
+                  $shouldRelease = "false"
+                } else {
+                  Write-Host "Version change detected: $prevVer -> $currVer. Will trigger release for tag $targetTag!"
+                  $shouldRelease = "true"
+                }
+              } elseif (-not $tagExists) {
+                Write-Host "Tag $targetTag does not exist yet. Will trigger release!"
+                $shouldRelease = "true"
+              } else {
+                Write-Host "Version $currVer did not change (prev: $prevVer) and tag $targetTag already exists. Skipping release."
+                $shouldRelease = "false"
+              }
+            }
+          }
+
+          "should_release=$shouldRelease" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "tag_name=$targetTag" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
   release:
     name: Build & Release (Windows)
+    needs: check-version
+    if: needs.check-version.outputs.should_release == 'true'
     runs-on: windows-latest
 
     steps:
@@ -40,7 +159,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: 'go.mod'
-          cache: false # 明确禁用 Actions 缓存，避免占用 Actions 存储配额
+          cache: false # 禁用 Actions 缓存，避免占用计费存储配额
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -75,11 +194,8 @@ jobs:
             exit 1
           }
 
-          # 确定版本号
-          $tag = "${{ github.ref_name }}"
-          if ("${{ github.event_name }}" -eq "workflow_dispatch" -and "${{ inputs.tag_name }}") {
-            $tag = "${{ inputs.tag_name }}"
-          }
+          # 确定版本号 (来自 check-version 的输出)
+          $tag = "${{ needs.check-version.outputs.tag_name }}"
           if (-not $tag) {
             $tag = "v1.0.0"
           }
@@ -117,14 +233,13 @@ jobs:
           } else {
             Write-Host "Creating new Release $tag..."
             gh release create $tag $zipFile $shaFile $exeFile `
+              --target ${{ github.sha }} `
               --title "L4D2 VPK Manager $tag" `
               --generate-notes `
               @flags
           }
 
-      # 注意：本工作流不调用 actions/upload-artifact，
-      # 所有安装包直接挂载至 GitHub Releases，不会占用 GitHub Actions 的计费 Artifact 存储空间。
-      # 下面步骤进一步在 Runner 本地彻底清理构建临时文件。
+      # 彻底清理 Runner 临时文件，避免占用空间
       - name: Cleanup Runner Workspace
         if: always()
         shell: pwsh
