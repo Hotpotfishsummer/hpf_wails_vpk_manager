@@ -272,6 +272,8 @@ export namespace models {
 	    chinese_lang: boolean;
 	    direct_launch: boolean;
 	    custom_args: string;
+	    server_connect_cmd: string;
+	    network_rates_cmd: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new LaunchSettings(source);
@@ -283,6 +285,8 @@ export namespace models {
 	        this.chinese_lang = source["chinese_lang"];
 	        this.direct_launch = source["direct_launch"];
 	        this.custom_args = source["custom_args"];
+	        this.server_connect_cmd = source["server_connect_cmd"];
+	        this.network_rates_cmd = source["network_rates_cmd"];
 	    }
 	}
 	export class LocalizeResult {

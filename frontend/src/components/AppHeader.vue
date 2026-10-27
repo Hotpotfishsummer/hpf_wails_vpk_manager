@@ -12,7 +12,7 @@
               {{ totalModsCount }} {{ $t('modsLoaded', 'MODS') }}
             </span>
           </div>
-          <p class="app-subtitle">Left 4 Dead 2 VPK Manager</p>
+          <p class="app-subtitle">Left 4 Dead 2 Mod & VPK Manager</p>
         </div>
       </div>
 

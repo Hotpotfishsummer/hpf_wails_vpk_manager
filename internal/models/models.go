@@ -146,20 +146,27 @@ type DetectGameResult struct {
 	Clients []DetectedGameClient `json:"clients"`
 }
 
+// DefaultNetworkRatesCmd represents standard 100-tickrate network optimization cvars (semicolon-separated for in-game console paste)
+const DefaultNetworkRatesCmd = "cl_updaterate 100; cl_cmdrate 100; cl_interp 0.01; cl_interp_ratio 1"
+
 // LaunchSettings represents game startup parameters configuration
 type LaunchSettings struct {
-	NoVid        bool   `json:"novid"`          // 跳过片头动画 (-novid)
-	ChineseLang  bool   `json:"chinese_lang"`   // 强制中文启动 (-language schinese)
-	DirectLaunch bool   `json:"direct_launch"`  // 强制直接启动主程序 (跳过 Steam 唤起)
-	CustomArgs   string `json:"custom_args"`    // 自定义额外参数
+	NoVid            bool   `json:"novid"`              // 跳过片头动画 (-novid)
+	ChineseLang      bool   `json:"chinese_lang"`       // 强制中文启动 (-language schinese)
+	DirectLaunch     bool   `json:"direct_launch"`      // 强制直接启动主程序 (跳过 Steam 唤起)
+	CustomArgs       string `json:"custom_args"`        // 自定义额外参数
+	ServerConnectCmd string `json:"server_connect_cmd"` // 快捷复制服务器指令 (默认 "connect 192.168.1.200")
+	NetworkRatesCmd  string `json:"network_rates_cmd"`  // 快捷复制网络参数指令 (默认 100 Tick 优化参数)
 }
 
 func DefaultLaunchSettings() LaunchSettings {
 	return LaunchSettings{
-		NoVid:        true,
-		ChineseLang:  true,
-		DirectLaunch: false,
-		CustomArgs:   "",
+		NoVid:            true,
+		ChineseLang:      true,
+		DirectLaunch:     false,
+		CustomArgs:       "",
+		ServerConnectCmd: "connect 192.168.1.200",
+		NetworkRatesCmd:  DefaultNetworkRatesCmd,
 	}
 }
 

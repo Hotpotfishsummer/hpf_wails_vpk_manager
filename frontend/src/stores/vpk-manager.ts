@@ -24,6 +24,24 @@ export const GROUP_COLOR_PALETTE = [
   '#fb923c', // 珊瑚橙 Coral
 ]
 
+export const DEFAULT_NETWORK_RATES = 'cl_updaterate 100; cl_cmdrate 100; cl_interp 0.01; cl_interp_ratio 1'
+
+/**
+ * 将多行或包含注释的控制台指令转换为适合直接粘贴至 Source 引擎控制台的单行指令 (分号分隔)
+ */
+export function formatConsoleCommands(raw: string): string {
+  if (!raw) return ''
+  const commands: string[] = []
+  const lines = raw.split(/\r?\n/)
+  for (const line of lines) {
+    const withoutComment = line.replace(/\/\/.*$/, '').trim()
+    if (!withoutComment) continue
+    const subCommands = withoutComment.split(';').map(c => c.trim()).filter(Boolean)
+    commands.push(...subCommands)
+  }
+  return commands.join('; ')
+}
+
 export function getVpkKey(vpkPath: string): string {
   if (!vpkPath) return ''
   const normalized = vpkPath.replace(/\\/g, '/')
@@ -244,6 +262,8 @@ export const useVpkManagerStore = defineStore('vpkManager', () => {
     chinese_lang: true,
     direct_launch: false,
     custom_args: '',
+    server_connect_cmd: 'connect 192.168.1.200',
+    network_rates_cmd: DEFAULT_NETWORK_RATES,
   })
 
   // OpenAI 兼容 API 设置
@@ -260,7 +280,7 @@ export const useVpkManagerStore = defineStore('vpkManager', () => {
   // 消息提示状态
   const notification = reactive({
     message: '',
-    type: 'info' as 'success' | 'error' | 'info'
+    type: 'info' as 'success' | 'error' | 'info' | 'warning'
   })
 
   const confirmState = reactive({ show: false, message: '', resolve: null as null | ((v: boolean) => void) })
@@ -281,7 +301,7 @@ export const useVpkManagerStore = defineStore('vpkManager', () => {
     confirmState.show = false
   }
 
-  function showNotification(message: string, type: 'success' | 'error' | 'info' = 'info') {
+  function showNotification(message: string, type: 'success' | 'error' | 'info' | 'warning' = 'info') {
     notification.message = message
     notification.type = type
     
@@ -516,8 +536,8 @@ export const useVpkManagerStore = defineStore('vpkManager', () => {
   }
 
   /** 扫描本地与创意工坊 VPK 列表(经后端 scan_vpk_files) */
-  async function scanVpks(directory: string) {
-    if (!directory) return
+  async function scanVpks(directory: string): Promise<boolean> {
+    if (!directory) return false
 
     isScanning.value = true
     showNotification('', 'info') // 清除之前的消息
@@ -529,9 +549,24 @@ export const useVpkManagerStore = defineStore('vpkManager', () => {
         currentDirectory.value = directory
         localVpkFiles.value = result.local_vpks || []
         workshopVpkFiles.value = result.workshop_vpks || []
+
+        // 保留依然存在的已选文件，过滤已不存在的
+        const prevLocal = new Set(selectedLocalVpks)
+        const prevWorkshop = new Set(selectedWorkshopVpks)
         selectedLocalVpks.clear()
         selectedWorkshopVpks.clear()
-        if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('selected') === '1' && localVpkFiles.value.length > 0) {
+        for (const file of localVpkFiles.value) {
+          if (prevLocal.has(file.path)) {
+            selectedLocalVpks.add(file.path)
+          }
+        }
+        for (const file of workshopVpkFiles.value) {
+          if (prevWorkshop.has(file.path)) {
+            selectedWorkshopVpks.add(file.path)
+          }
+        }
+
+        if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('selected') === '1' && localVpkFiles.value.length > 0 && selectedLocalVpks.size === 0) {
           selectedLocalVpks.add(localVpkFiles.value[0].path)
         }
         console.log(`Successfully scanned ${localVpkFiles.value.length + workshopVpkFiles.value.length} files`)
@@ -541,14 +576,34 @@ export const useVpkManagerStore = defineStore('vpkManager', () => {
         callApi(api => api.is_steam_client(directory), false).then(isSteam => {
           isCurrentSteamClient.value = isSteam
         })
+        return true
       } else {
         showNotification(result.error || $t('scanFailed'), 'error')
+        return false
       }
     } catch (error) {
       showNotification($t('scanError', { error }), 'error')
+      return false
     } finally {
       isScanning.value = false
     }
+  }
+
+  /** 手动触发刷新本地与工坊 VPK 模组列表 */
+  async function refreshVpks(silent = false): Promise<boolean> {
+    if (!currentDirectory.value) {
+      if (!silent) {
+        showNotification($t('needDirectoryFirst'), 'warning')
+      }
+      return false
+    }
+
+    const success = await scanVpks(currentDirectory.value)
+    if (success && !silent) {
+      const total = localVpkFiles.value.length + workshopVpkFiles.value.length
+      showNotification($t('refreshSuccess', { count: total }), 'success')
+    }
+    return success
   }
 
     /** 弹窗选择压缩包并导入到本地 addons(经后端 import_compressed_vpks) */
@@ -751,6 +806,12 @@ async function localizeVpks() {
       const launch = await getApi().get_launch_settings()
       if (launch) {
         Object.assign(launchSettings, launch)
+        if (!launchSettings.server_connect_cmd) {
+          launchSettings.server_connect_cmd = 'connect 192.168.1.200'
+        }
+        if (!launchSettings.network_rates_cmd) {
+          launchSettings.network_rates_cmd = DEFAULT_NETWORK_RATES
+        }
       }
 
       // 加载自定义分组配置
@@ -774,6 +835,57 @@ async function localizeVpks() {
     } catch (error) {
       showNotification(`保存启动设置错误: ${error}`, 'error')
       throw error
+    }
+  }
+
+  /** 快捷复制服务器连接指令到剪贴板 */
+  async function copyServerConnectCmd(): Promise<boolean> {
+    const cmd = launchSettings.server_connect_cmd?.trim() || 'connect 192.168.1.200'
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(cmd)
+      } else {
+        const ta = document.createElement('textarea')
+        ta.value = cmd
+        ta.style.position = 'fixed'
+        ta.style.opacity = '0'
+        document.body.appendChild(ta)
+        ta.select()
+        document.execCommand('copy')
+        document.body.removeChild(ta)
+      }
+      showNotification($t('copiedServerAddressSuccess', { cmd }), 'success')
+      return true
+    } catch (e) {
+      console.error('Failed to copy server command:', e)
+      showNotification(String(e), 'error')
+      return false
+    }
+  }
+
+  /** 快捷复制网络参数指令 (Tickrate 100) 到剪贴板 */
+  async function copyNetworkRatesCmd(): Promise<boolean> {
+    const rawCmd = launchSettings.network_rates_cmd?.trim() || DEFAULT_NETWORK_RATES
+    const cmd = formatConsoleCommands(rawCmd)
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(cmd)
+      } else {
+        const ta = document.createElement('textarea')
+        ta.value = cmd
+        ta.style.position = 'fixed'
+        ta.style.opacity = '0'
+        document.body.appendChild(ta)
+        ta.select()
+        document.execCommand('copy')
+        document.body.removeChild(ta)
+      }
+      showNotification($t('copyNetworkParamsSuccess', { cmd }), 'success')
+      return true
+    } catch (e) {
+      console.error('Failed to copy network rates command:', e)
+      showNotification(String(e), 'error')
+      return false
     }
   }
 
@@ -1308,6 +1420,7 @@ async function downloadRemoteVpks() {
     clearSelection,
     getSelectedVpkPaths,
     scanVpks,
+    refreshVpks,
     importVpks,
     importFiles,
     localizeVpks,
@@ -1344,6 +1457,9 @@ async function downloadRemoteVpks() {
     launchGame,
     launchSettings,
     saveLaunchSettings,
+    copyServerConnectCmd,
+    copyNetworkRatesCmd,
+    formatConsoleCommands,
     groups,
     isGroupModalOpen,
     groupModalMode,

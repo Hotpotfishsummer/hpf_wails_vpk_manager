@@ -81,48 +81,52 @@
       </div>
     </div>
 
-    <!-- 内容区域 -->
-    <div class="browser-content">
-      <!-- 多选操作栏 -->
-      <div v-if="store.remoteVpkFiles.length > 0" class="selection-actions">
-        <div class="selection-info">
-          <label class="custom-checkbox" @click.stop>
-            <input
-              type="checkbox"
-              :checked="isAllSelected"
-              @change="toggleSelectAll"
-            />
-            <span class="checkbox-mark" :class="{ 'is-checked': isAllSelected }">
-              <SvgIcon v-if="isAllSelected" name="check" :size="12" stroke-width="3.2" class="check-icon" />
-            </span>
-            <span class="count-text">
-              {{ store.selectedRemoteVpks.size > 0 ? $t('selectionInfo', { count: store.selectedRemoteVpks.size }) : $t('selectAll') }}
-            </span>
-          </label>
-        </div>
-
-        <div class="batch-action-btns" v-if="store.selectedRemoteVpks.size > 0">
-          <button
-            @click="store.downloadRemoteVpks"
-            class="mini-action-btn download"
-            :title="$t('syncToLocal')"
-            :disabled="store.isDownloading"
-          >
-            <SvgIcon v-if="store.isDownloading" name="loader" :size="13" :spin="true" />
-            <SvgIcon v-else name="import" :size="13" />
-          </button>
-          <button @click="handleBatchEnable" class="mini-action-btn enable" :title="$t('enable')">
-            <SvgIcon name="check" :size="13" />
-          </button>
-          <button @click="handleBatchDisable" class="mini-action-btn disable" :title="$t('disable')">
-            <SvgIcon name="ban" :size="13" />
-          </button>
-          <button @click="handleBatchDelete" class="mini-action-btn delete" :title="$t('delete')">
-            <SvgIcon name="trash" :size="13" />
-          </button>
-        </div>
+    <!-- 多选操作栏 (置于可滚动列表外，始终固定在顶部) -->
+    <div
+      v-if="store.remoteVpkFiles.length > 0 && !store.isRemoteScanning"
+      class="selection-actions"
+      :class="{ 'has-selection': store.selectedRemoteVpks.size > 0 }"
+    >
+      <div class="selection-info">
+        <label class="custom-checkbox" @click.stop>
+          <input
+            type="checkbox"
+            :checked="isAllSelected"
+            @change="toggleSelectAll"
+          />
+          <span class="checkbox-mark" :class="{ 'is-checked': isAllSelected }">
+            <SvgIcon v-if="isAllSelected" name="check" :size="12" stroke-width="3.2" class="check-icon" />
+          </span>
+          <span class="count-text">
+            {{ store.selectedRemoteVpks.size > 0 ? $t('selectionInfo', { count: store.selectedRemoteVpks.size }) : $t('selectAll') }}
+          </span>
+        </label>
       </div>
 
+      <div class="batch-action-btns" v-if="store.selectedRemoteVpks.size > 0">
+        <button
+          @click="store.downloadRemoteVpks"
+          class="mini-action-btn download"
+          :title="$t('syncToLocal')"
+          :disabled="store.isDownloading"
+        >
+          <SvgIcon v-if="store.isDownloading" name="loader" :size="13" :spin="true" />
+          <SvgIcon v-else name="import" :size="13" />
+        </button>
+        <button @click="handleBatchEnable" class="mini-action-btn enable" :title="$t('enable')">
+          <SvgIcon name="check" :size="13" />
+        </button>
+        <button @click="handleBatchDisable" class="mini-action-btn disable" :title="$t('disable')">
+          <SvgIcon name="ban" :size="13" />
+        </button>
+        <button @click="handleBatchDelete" class="mini-action-btn delete" :title="$t('delete')">
+          <SvgIcon name="trash" :size="13" />
+        </button>
+      </div>
+    </div>
+
+    <!-- 内容区域 (仅列表在此区域滚动) -->
+    <div class="browser-content">
       <!-- 加载中 -->
       <div v-if="store.isRemoteScanning" class="remote-loading">
         <SvgIcon name="loader" :size="24" :spin="true" class="spinner-icon" />
@@ -133,6 +137,12 @@
       <div v-else-if="store.remoteVpkFiles.length === 0" class="remote-empty">
         <SvgIcon name="folder" :size="32" class="empty-folder-icon" />
         <p>{{ $t('noRemoteFiles') }}</p>
+      </div>
+
+      <!-- 搜索无结果 -->
+      <div v-else-if="sortedRemoteFiles.length === 0" class="remote-empty">
+        <SvgIcon name="search" :size="32" class="empty-folder-icon" />
+        <p>{{ $t('noSearchResults') }}</p>
       </div>
 
       <!-- 远程列表 -->
@@ -452,21 +462,32 @@ function formatDate(timestamp: number): string {
   margin-left: 2px;
 }
 
-/* 内容区 */
-.browser-content {
-  flex: 1;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-}
-
+/* 固定多选操作栏 (不随列表滚动) */
 .selection-actions {
   padding: 8px 14px;
-  background: rgba(56, 189, 248, 0.06);
+  background: #111827;
   border-bottom: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-shrink: 0;
+  z-index: 5;
+  transition: all var(--transition-fast);
+}
+
+.selection-actions.has-selection {
+  background: linear-gradient(180deg, rgba(14, 165, 233, 0.14) 0%, rgba(17, 24, 39, 0.98) 100%);
+  border-bottom-color: rgba(56, 189, 248, 0.35);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+}
+
+/* 内容列表区域 (仅此区域滚动) */
+.browser-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
 }
 
 .count-text {

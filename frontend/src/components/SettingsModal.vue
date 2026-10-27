@@ -126,6 +126,82 @@
               />
               <span class="field-hint">{{ $t('launchCustomArgsDesc') }}</span>
             </div>
+
+            <!-- 快捷复制服务器指令设置 -->
+            <div class="settings-field full-width">
+              <div class="field-label-row">
+                <label class="setting-label">{{ $t('serverConnectCmd') }}</label>
+                <button
+                  type="button"
+                  class="btn-inline-copy"
+                  @click="handleTestCopyCmd"
+                  :title="$t('testCopyServerTooltip')"
+                >
+                  <SvgIcon :name="testCopied ? 'check' : 'copy'" :size="12" />
+                  <span>{{ testCopied ? $t('copied') : $t('copyServer') }}</span>
+                </button>
+              </div>
+              <input
+                type="text"
+                v-model="store.launchSettings.server_connect_cmd"
+                @change="store.saveLaunchSettings()"
+                class="setting-input"
+                placeholder="connect 192.168.1.200"
+              />
+              <span class="field-hint">{{ $t('serverConnectCmdDesc') }}</span>
+            </div>
+
+            <!-- 修改网络参数设置 (Tickrate 100 匹配) -->
+            <div class="settings-field full-width">
+              <div class="field-label-row">
+                <div class="label-with-presets">
+                  <label class="setting-label">{{ $t('networkRatesCmd') }}</label>
+                  <div class="preset-tag-group">
+                    <button
+                      type="button"
+                      class="btn-preset-tag"
+                      @click="applyNetworkPreset('100')"
+                      :title="$t('preset100TickTooltip')"
+                    >
+                      {{ $t('preset100Tick') }}
+                    </button>
+                    <button
+                      type="button"
+                      class="btn-preset-tag"
+                      @click="applyNetworkPreset('60')"
+                      :title="$t('preset60TickTooltip')"
+                    >
+                      {{ $t('preset60Tick') }}
+                    </button>
+                    <button
+                      type="button"
+                      class="btn-preset-tag"
+                      @click="applyNetworkPreset('30')"
+                      :title="$t('preset30TickTooltip')"
+                    >
+                      {{ $t('preset30Tick') }}
+                    </button>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  class="btn-inline-copy btn-inline-network"
+                  @click="handleTestCopyNetwork"
+                  :title="$t('testCopyNetworkTooltip')"
+                >
+                  <SvgIcon :name="testNetworkCopied ? 'check' : 'copy'" :size="12" />
+                  <span>{{ testNetworkCopied ? $t('copied') : $t('networkParams') }}</span>
+                </button>
+              </div>
+              <textarea
+                v-model="store.launchSettings.network_rates_cmd"
+                @change="store.saveLaunchSettings()"
+                class="setting-textarea font-mono"
+                rows="4"
+                :placeholder="DEFAULT_NETWORK_RATES"
+              ></textarea>
+              <span class="field-hint">{{ $t('networkRatesCmdDesc') }}</span>
+            </div>
           </div>
 
           <!-- SFTP 设置 -->
@@ -309,7 +385,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useVpkManagerStore } from '@/stores/vpk-manager'
+import { useVpkManagerStore, DEFAULT_NETWORK_RATES } from '@/stores/vpk-manager'
 import { useI18n } from 'vue-i18n'
 import { getApi } from '@/composables/useApi'
 import SvgIcon from '@/components/common/SvgIcon.vue'
@@ -326,6 +402,40 @@ const connectionTestResult = ref<{ ok: boolean; message: string } | null>(null)
 
 const isTestingAi = ref(false)
 const aiTestResult = ref<{ ok: boolean; message: string } | null>(null)
+
+const testCopied = ref(false)
+const testNetworkCopied = ref(false)
+
+async function handleTestCopyCmd() {
+  const ok = await store.copyServerConnectCmd()
+  if (ok) {
+    testCopied.value = true
+    setTimeout(() => {
+      testCopied.value = false
+    }, 2000)
+  }
+}
+
+async function handleTestCopyNetwork() {
+  const ok = await store.copyNetworkRatesCmd()
+  if (ok) {
+    testNetworkCopied.value = true
+    setTimeout(() => {
+      testNetworkCopied.value = false
+    }, 2000)
+  }
+}
+
+function applyNetworkPreset(preset: '100' | '60' | '30') {
+  if (preset === '100') {
+    store.launchSettings.network_rates_cmd = `cl_updaterate 100; cl_cmdrate 100; cl_interp 0.01; cl_interp_ratio 1`
+  } else if (preset === '60') {
+    store.launchSettings.network_rates_cmd = `cl_updaterate 60; cl_cmdrate 60; cl_interp 0.016667; cl_interp_ratio 1`
+  } else if (preset === '30') {
+    store.launchSettings.network_rates_cmd = `cl_updaterate 30; cl_cmdrate 30; cl_interp 0.033333; cl_interp_ratio 1`
+  }
+  store.saveLaunchSettings()
+}
 
 async function handleResetData() {
   const confirmed = await store.showConfirm($t('confirmResetAppData'))
@@ -761,6 +871,107 @@ async function handleTestAiConnection() {
 
 .switch-control input:checked:hover + .switch-slider {
   border-color: #6ee7b7;
+}
+
+.field-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.field-label-row .setting-label {
+  margin-bottom: 0;
+}
+
+.btn-inline-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(56, 189, 248, 0.12);
+  color: var(--accent-primary);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.btn-inline-copy:hover {
+  background: rgba(56, 189, 248, 0.22);
+  border-color: rgba(56, 189, 248, 0.6);
+  box-shadow: 0 0 10px var(--accent-primary-glow);
+}
+
+.btn-inline-network {
+  background: rgba(245, 158, 11, 0.12);
+  color: #fbbf24;
+  border-color: rgba(245, 158, 11, 0.35);
+}
+
+.btn-inline-network:hover {
+  background: rgba(245, 158, 11, 0.22);
+  border-color: rgba(245, 158, 11, 0.6);
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.35);
+}
+
+.label-with-presets {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.preset-tag-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-preset-tag {
+  appearance: none;
+  background: rgba(245, 158, 11, 0.1);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.btn-preset-tag:hover {
+  background: rgba(245, 158, 11, 0.22);
+  border-color: rgba(245, 158, 11, 0.5);
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.3);
+}
+
+.setting-textarea {
+  width: 100%;
+  background: #0b111e !important;
+  border: 1px solid #2d3e58 !important;
+  border-radius: var(--radius-sm);
+  color: #e2e8f0;
+  padding: 10px 12px;
+  font-size: 12px;
+  resize: vertical;
+  line-height: 1.6;
+  min-height: 92px;
+  transition: all var(--transition-fast);
+  box-sizing: border-box;
+}
+
+.setting-textarea:focus {
+  outline: none;
+  border-color: #fbbf24 !important;
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.25) !important;
+}
+
+.font-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 
 .field-hint {

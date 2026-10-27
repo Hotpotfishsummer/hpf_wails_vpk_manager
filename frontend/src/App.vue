@@ -96,7 +96,7 @@
 
           <!-- 页脚 -->
           <footer class="app-footer">
-            <p class="footer-text">© 2026 L4D2 VPK Manager • Powered by Go + Wails v2 + Vue 3</p>
+            <p class="footer-text">© 2026 L4D2 Mod Manager • Powered by Go + Wails v2 + Vue 3</p>
           </footer>
         </div>
       </div>
@@ -272,7 +272,17 @@ async function handleEmptyBrowse() {
   }
 }
 
+function onWindowKeyDown(e: KeyboardEvent) {
+  if (e.key === 'F5' || (e.ctrlKey && e.key.toLowerCase() === 'r')) {
+    e.preventDefault()
+    if (store.currentDirectory && !store.isScanning) {
+      store.refreshVpks()
+    }
+  }
+}
+
 onMounted(async () => {
+  window.addEventListener('keydown', onWindowKeyDown)
   window.addEventListener('dragenter', onWindowDragEnter)
   window.addEventListener('dragover', onWindowDragOver)
   window.addEventListener('dragleave', onWindowDragLeave)
@@ -296,6 +306,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  window.removeEventListener('keydown', onWindowKeyDown)
   window.removeEventListener('dragenter', onWindowDragEnter)
   window.removeEventListener('dragover', onWindowDragOver)
   window.removeEventListener('dragleave', onWindowDragLeave)

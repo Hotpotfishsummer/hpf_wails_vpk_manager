@@ -103,6 +103,16 @@
             <SvgIcon name="list" :size="15" />
           </button>
         </div>
+
+        <!-- 刷新模组列表按钮 -->
+        <button
+          class="list-refresh-btn"
+          @click="store.refreshVpks()"
+          :disabled="store.isScanning"
+          :title="$t('refreshTooltip')"
+        >
+          <SvgIcon name="refresh" :size="15" :spin="store.isScanning" />
+        </button>
       </div>
     </div>
 
@@ -399,5 +409,34 @@ function toggleSort(key: 'name' | 'size' | 'date') {
   background: #0284c7 !important;
   color: #ffffff !important;
   box-shadow: 0 1px 4px rgba(2, 132, 199, 0.4);
+}
+
+/* 模组列表工具栏刷新按钮 */
+.list-refresh-btn {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  background: #101726;
+  border: 1px solid var(--border-medium);
+  color: #cbd5e1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.list-refresh-btn:hover:not(:disabled) {
+  background: #1c273e;
+  border-color: rgba(6, 182, 212, 0.5);
+  color: #22d3ee;
+  box-shadow: 0 0 8px rgba(6, 182, 212, 0.2);
+}
+
+.list-refresh-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style>

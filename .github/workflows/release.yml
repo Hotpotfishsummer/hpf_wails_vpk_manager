@@ -188,19 +188,20 @@ jobs:
         id: pkg
         shell: pwsh
         run: |
-          $exePath = "build\bin\L4D2-VPK-Manager.exe"
-          if (-not (Test-Path $exePath)) {
-            Write-Error "Build output not found at $exePath"
+          $exeItem = Get-ChildItem "build\bin\*.exe" | Select-Object -First 1
+          if (-not $exeItem -or -not (Test-Path $exeItem.FullName)) {
+            Write-Error "Build output not found in build\bin"
             exit 1
           }
+          $exePath = $exeItem.FullName
 
           # 确定版本号 (来自 check-version 的输出)
           $tag = "${{ needs.check-version.outputs.tag_name }}"
           if (-not $tag) {
-            $tag = "v1.0.0"
+            $tag = "v1.2.0"
           }
 
-          $zipName = "L4D2-VPK-Manager-$tag-windows-amd64.zip"
+          $zipName = "L4D2-Mod-Manager-$tag-windows-amd64.zip"
           Compress-Archive -Path $exePath -DestinationPath $zipName -Force
 
           # 生成 SHA256 校验码
@@ -209,6 +210,7 @@ jobs:
 
           "TAG_NAME=$tag" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "ZIP_NAME=$zipName" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "EXE_PATH=$exePath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           Write-Host "Prepared $zipName with SHA256 $hash"
 
       - name: Publish to GitHub Release
@@ -219,7 +221,7 @@ jobs:
           $tag = $env:TAG_NAME
           $zipFile = $env:ZIP_NAME
           $shaFile = "$zipFile.sha256"
-          $exeFile = "build\bin\L4D2-VPK-Manager.exe"
+          $exeFile = $env:EXE_PATH
 
           $flags = @()
           if ("${{ inputs.draft }}" -eq "true") { $flags += "--draft" }
@@ -234,7 +236,7 @@ jobs:
             Write-Host "Creating new Release $tag..."
             gh release create $tag $zipFile $shaFile $exeFile `
               --target ${{ github.sha }} `
-              --title "L4D2 VPK Manager $tag" `
+              --title "L4D2 Mod Manager $tag" `
               --generate-notes `
               @flags
           }

@@ -190,6 +190,27 @@
       <path d="M17 4v16"></path>
     </g>
 
+    <!-- Sliders / Network Parameters -->
+    <g v-else-if="name === 'sliders'">
+      <line x1="4" y1="21" x2="4" y2="14"></line>
+      <line x1="4" y1="10" x2="4" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="12"></line>
+      <line x1="12" y1="8" x2="12" y2="3"></line>
+      <line x1="20" y1="21" x2="20" y2="16"></line>
+      <line x1="20" y1="12" x2="20" y2="3"></line>
+      <line x1="1" y1="14" x2="7" y2="14"></line>
+      <line x1="9" y1="8" x2="15" y2="8"></line>
+      <line x1="17" y1="16" x2="23" y2="16"></line>
+    </g>
+
+    <!-- Wifi / Network -->
+    <g v-else-if="name === 'wifi'">
+      <path d="M5 12.55a11 11 0 0 1 14.08 0"></path>
+      <path d="M1.42 9a16 16 0 0 1 21.16 0"></path>
+      <path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path>
+      <line x1="12" y1="20" x2="12.01" y2="20"></line>
+    </g>
+
     <!-- Copy -->
     <g v-else-if="name === 'copy'">
       <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>

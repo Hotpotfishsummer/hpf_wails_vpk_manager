@@ -16,6 +16,14 @@
         <div class="path-actions" v-if="store.currentDirectory">
           <button
             class="path-mini-btn"
+            @click="store.refreshVpks()"
+            :disabled="store.isScanning"
+            :title="$t('refreshTooltip')"
+          >
+            <SvgIcon name="refresh" :size="14" :spin="store.isScanning" />
+          </button>
+          <button
+            class="path-mini-btn"
             @click="handleCopyPath"
             :title="$t('copyPath', '复制路径')"
           >
@@ -45,6 +53,18 @@
           <span>{{ store.isImporting ? $t('importing') : $t('importFiles') }}</span>
         </button>
 
+        <!-- 刷新模组列表按钮 -->
+        <button
+          @click="store.refreshVpks()"
+          :disabled="!store.currentDirectory || store.isScanning"
+          class="btn-refresh-box"
+          :class="{ 'btn-loading': store.isScanning }"
+          :title="!store.currentDirectory ? $t('needSelectL4d2') : $t('refreshTooltip')"
+        >
+          <SvgIcon name="refresh" :size="14" :spin="store.isScanning" />
+          <span>{{ store.isScanning ? $t('refreshing') : $t('refresh') }}</span>
+        </button>
+
         <!-- 自动搜索客户端按钮 -->
         <button
           @click="handleAutoDetect"
@@ -71,6 +91,26 @@
           <span>{{ isLoading ? $t('browsing') : $t('browseFolder') }}</span>
         </button>
 
+        <!-- 复制服务器连接指令按钮 -->
+        <button
+          @click="handleCopyServer"
+          class="btn-copy-server-box"
+          :title="$t('copyServerTooltip', { cmd: store.launchSettings.server_connect_cmd || 'connect 192.168.1.200' })"
+        >
+          <SvgIcon :name="serverCopied ? 'check' : 'server'" :size="14" />
+          <span>{{ serverCopied ? $t('copied') : $t('copyServer') }}</span>
+        </button>
+
+        <!-- 修改网络参数按钮 (复制 100 Tick 网络参数) -->
+        <button
+          @click="handleCopyNetworkRates"
+          class="btn-copy-network-box"
+          :title="$t('copyNetworkTooltip', { cmd: formatConsoleCommands(store.launchSettings.network_rates_cmd || DEFAULT_NETWORK_RATES) })"
+        >
+          <SvgIcon :name="networkCopied ? 'check' : 'sliders'" :size="14" />
+          <span>{{ networkCopied ? $t('copied') : $t('networkParams') }}</span>
+        </button>
+
         <!-- 启动游戏按钮 -->
         <button
           @click="store.launchGame"
@@ -91,7 +131,7 @@
 </template>
 
 <script setup lang="ts">
-import { useVpkManagerStore } from '@/stores/vpk-manager'
+import { useVpkManagerStore, DEFAULT_NETWORK_RATES, formatConsoleCommands } from '@/stores/vpk-manager'
 import { useI18n } from 'vue-i18n'
 import { ref, computed } from 'vue'
 import { getApi } from '@/composables/useApi'
@@ -101,6 +141,9 @@ const { t: $t } = useI18n()
 const store = useVpkManagerStore()
 const isLoading = ref(false)
 const copied = ref(false)
+const serverCopied = ref(false)
+const networkCopied = ref(false)
+let networkCopyTimer: number | null = null
 
 const isSteamLaunchMode = computed(() => {
   return store.isCurrentSteamClient && !store.launchSettings.direct_launch
@@ -121,6 +164,27 @@ async function handleCopyPath() {
     }, 2000)
   } catch (e) {
     console.error('Failed to copy path', e)
+  }
+}
+
+async function handleCopyServer() {
+  const success = await store.copyServerConnectCmd()
+  if (success) {
+    serverCopied.value = true
+    setTimeout(() => {
+      serverCopied.value = false
+    }, 2000)
+  }
+}
+
+async function handleCopyNetworkRates() {
+  const success = await store.copyNetworkRatesCmd()
+  if (success) {
+    networkCopied.value = true
+    if (networkCopyTimer) clearTimeout(networkCopyTimer)
+    networkCopyTimer = window.setTimeout(() => {
+      networkCopied.value = false
+    }, 2000)
   }
 }
 
@@ -256,6 +320,7 @@ function handleAutoDetect() {
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
+  flex-wrap: wrap;
 }
 
 /* 导入按钮 */
@@ -274,6 +339,40 @@ function handleAutoDetect() {
   background: rgba(16, 185, 129, 0.22);
   border-color: rgba(16, 185, 129, 0.5);
   box-shadow: 0 0 12px var(--accent-success-glow);
+}
+
+/* 刷新列表按钮 */
+.btn-refresh-box {
+  height: 36px;
+  padding: 0 14px;
+  border-radius: var(--radius-md);
+  background: rgba(6, 182, 212, 0.12);
+  color: #22d3ee;
+  border: 1px solid rgba(6, 182, 212, 0.35);
+  font-weight: 600;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.btn-refresh-box:hover:not(:disabled) {
+  background: rgba(6, 182, 212, 0.22);
+  border-color: rgba(6, 182, 212, 0.6);
+  box-shadow: 0 0 12px rgba(6, 182, 212, 0.3);
+  transform: translateY(-1px);
+}
+
+.btn-refresh-box:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.btn-refresh-box:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* 自动探测按钮 */
@@ -315,6 +414,64 @@ function handleAutoDetect() {
 .btn-browse-box:hover:not(:disabled) {
   background: linear-gradient(135deg, #0369a1 0%, #075985 100%);
   box-shadow: 0 4px 14px rgba(2, 132, 199, 0.5);
+}
+
+/* 复制服务器地址按钮 */
+.btn-copy-server-box {
+  height: 36px;
+  padding: 0 14px;
+  border-radius: var(--radius-md);
+  background: rgba(56, 189, 248, 0.12);
+  color: var(--accent-primary);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  font-weight: 600;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.btn-copy-server-box:hover {
+  background: rgba(56, 189, 248, 0.22);
+  border-color: rgba(56, 189, 248, 0.6);
+  box-shadow: 0 0 12px var(--accent-primary-glow);
+  transform: translateY(-1px);
+}
+
+.btn-copy-server-box:active {
+  transform: translateY(0);
+}
+
+/* 修改网络参数按钮 */
+.btn-copy-network-box {
+  height: 36px;
+  padding: 0 14px;
+  border-radius: var(--radius-md);
+  background: rgba(245, 158, 11, 0.12);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  font-weight: 600;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.btn-copy-network-box:hover {
+  background: rgba(245, 158, 11, 0.22);
+  border-color: rgba(245, 158, 11, 0.6);
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.35);
+  transform: translateY(-1px);
+}
+
+.btn-copy-network-box:active {
+  transform: translateY(0);
 }
 
 /* 启动游戏主按钮 */

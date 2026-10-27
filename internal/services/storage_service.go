@@ -140,6 +140,12 @@ func (s *StorageService) GetLaunchSettings() models.LaunchSettings {
 	if err := json.Unmarshal(bytes, &res); err != nil {
 		return def
 	}
+	if res.ServerConnectCmd == "" {
+		res.ServerConnectCmd = def.ServerConnectCmd
+	}
+	if res.NetworkRatesCmd == "" {
+		res.NetworkRatesCmd = def.NetworkRatesCmd
+	}
 	return res
 }
 

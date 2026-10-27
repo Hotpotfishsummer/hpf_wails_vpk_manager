@@ -128,6 +128,7 @@ export function initDevMock() {
           BrowseDirectory: async () => mockState.dir,
           GetDownloadsDirectory: async () => 'C:\\Users\\User\\Downloads',
           ScanVpkFiles: async () => ({
+            success: true,
             local_vpks: isMockLoaded ? mockState.localVpks : [],
             workshop_vpks: isMockLoaded ? mockState.workshopVpks : [],
           }),
@@ -184,6 +185,8 @@ export function initDevMock() {
             chinese_lang: true,
             direct_launch: false,
             custom_args: '',
+            server_connect_cmd: 'connect 192.168.1.200',
+            network_rates_cmd: "cl_updaterate 100; cl_cmdrate 100; cl_interp 0.01; cl_interp_ratio 1",
           }),
           SaveLaunchSettings: async (_settings: any) => ({ success: true }),
           GetVpkGroups: async () => {

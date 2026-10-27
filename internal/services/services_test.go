@@ -29,6 +29,27 @@ func TestStorageService(t *testing.T) {
 	if cfg.Address != "127.0.0.1:22" || cfg.Username != "testuser" {
 		t.Errorf("GetSftpSettings = %+v", cfg)
 	}
+
+	// 测试 LaunchSettings 默认值与 ServerConnectCmd 及 NetworkRatesCmd
+	launchDef := storage.GetLaunchSettings()
+	if launchDef.ServerConnectCmd != "connect 192.168.1.200" {
+		t.Errorf("Expected default ServerConnectCmd to be 'connect 192.168.1.200', got %q", launchDef.ServerConnectCmd)
+	}
+	if launchDef.NetworkRatesCmd != models.DefaultNetworkRatesCmd {
+		t.Errorf("Expected default NetworkRatesCmd to be %q, got %q", models.DefaultNetworkRatesCmd, launchDef.NetworkRatesCmd)
+	}
+
+	// 保存并读取自定义服务器连接指令与网络参数
+	launchDef.ServerConnectCmd = "connect 10.0.0.1:27016"
+	launchDef.NetworkRatesCmd = "cl_updaterate 60; cl_cmdrate 60; cl_interp 0.016667; cl_interp_ratio 1"
+	storage.SaveLaunchSettings(launchDef)
+	launchSaved := storage.GetLaunchSettings()
+	if launchSaved.ServerConnectCmd != "connect 10.0.0.1:27016" {
+		t.Errorf("Expected ServerConnectCmd to be 'connect 10.0.0.1:27016', got %q", launchSaved.ServerConnectCmd)
+	}
+	if launchSaved.NetworkRatesCmd != "cl_updaterate 60; cl_cmdrate 60; cl_interp 0.016667; cl_interp_ratio 1" {
+		t.Errorf("Expected NetworkRatesCmd to be custom, got %q", launchSaved.NetworkRatesCmd)
+	}
 }
 
 func TestConfigService(t *testing.T) {

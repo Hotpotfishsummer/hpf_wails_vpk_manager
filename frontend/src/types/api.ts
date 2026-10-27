@@ -113,6 +113,8 @@ export interface LaunchSettings {
   chinese_lang: boolean
   direct_launch: boolean
   custom_args: string
+  server_connect_cmd?: string
+  network_rates_cmd?: string
 }
 
 /** VPK 自定义分组 */
